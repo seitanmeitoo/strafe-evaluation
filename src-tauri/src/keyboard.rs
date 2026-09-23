@@ -40,4 +40,26 @@ impl KeyboardLayout {
         use inputbot::KeybdKey::*;
         DKey.is_pressed() || RightKey.is_pressed()
     }
+
+    pub fn is_forward_pressed(&self) -> bool {
+        use inputbot::KeybdKey::*;
+        match self {
+            KeyboardLayout::Azerty => ZKey.is_pressed() || UpKey.is_pressed(),
+            KeyboardLayout::Qwerty => WKey.is_pressed() || UpKey.is_pressed(),
+        }
+    }
+
+    pub fn is_backward_pressed(&self) -> bool {
+        use inputbot::KeybdKey::*;
+        SKey.is_pressed() || DownKey.is_pressed()
+    }
+
+    pub fn is_diagonal_pressed(&self) -> bool {
+        self.is_forward_pressed() || self.is_backward_pressed()
+    }
+}
+
+pub fn is_mouse1_pressed() -> bool {
+    use inputbot::MouseButton::*;
+    LeftButton.is_pressed()
 }
