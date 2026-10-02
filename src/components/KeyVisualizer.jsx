@@ -1,7 +1,8 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
+import { formatKeyDisplay } from "../utils/settings";
 
-export default function KeyVisualizer() {
+export default function KeyVisualizer(props) {
   const [aPressed, setAPressed] = createSignal(false);
   const [dPressed, setDPressed] = createSignal(false);
   const [wPressed, setWPressed] = createSignal(false);
@@ -90,9 +91,9 @@ export default function KeyVisualizer() {
       </div>
 
       <div className="flex justify-center items-center gap-6 px-4">
-        {/* WASD cluster */}
+        {/* Dynamic cluster */}
         <div className="flex flex-col items-center gap-1">
-          {/* Row 1: W */}
+          {/* Row 1: Forward */}
           <div
             className={
               "flex border border-dark/20 shadow-md w-12 h-12 rounded-md justify-center items-center text-lg font-bold transition-all duration-75" +
@@ -101,10 +102,10 @@ export default function KeyVisualizer() {
                 : " bg-zinc-200/40 text-dark")
             }
           >
-            W
+            {formatKeyDisplay(props.keys?.forward || "W")}
           </div>
 
-          {/* Row 2: A, S, D */}
+          {/* Row 2: Left, Backward, Right */}
           <div className="flex gap-1 text-lg font-bold">
             <div
               className={
@@ -114,7 +115,7 @@ export default function KeyVisualizer() {
                   : " bg-zinc-200/40 text-dark")
               }
             >
-              A
+              {formatKeyDisplay(props.keys?.left || "A")}
             </div>
             <div
               className={
@@ -124,7 +125,7 @@ export default function KeyVisualizer() {
                   : " bg-zinc-200/40 text-dark")
               }
             >
-              S
+              {formatKeyDisplay(props.keys?.backward || "S")}
             </div>
             <div
               className={
@@ -134,7 +135,7 @@ export default function KeyVisualizer() {
                   : " bg-zinc-200/40 text-dark")
               }
             >
-              D
+              {formatKeyDisplay(props.keys?.right || "D")}
             </div>
           </div>
         </div>

@@ -1,10 +1,11 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use crate::keyboard::ActiveKeyBindings;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, RwLock};
 use std::time::SystemTime;
 use tauri::{AppHandle, Manager};
 
-pub const MAX_EVAL_MICROS: u128 = 200 * 1000;
-pub const PERFECT_THRESHOLD_MICROS: u128 = 1600;
+pub const DEFAULT_MAX_EVAL_MICROS: u64 = 250 * 1000;
+pub const DEFAULT_PERFECT_THRESHOLD_MICROS: u64 = 1600;
 pub const MAX_SHOT_WINDOW_MICROS: u128 = 300 * 1000;
 
 #[derive(Clone, serde::Serialize)]
@@ -30,6 +31,9 @@ pub struct PendingStrafe {
 pub struct GameState {
     pub pending_strafe: Mutex<Option<PendingStrafe>>,
     pub require_shot: AtomicBool,
+    pub key_bindings: RwLock<ActiveKeyBindings>,
+    pub perfect_threshold_micros: AtomicU64,
+    pub max_eval_micros: AtomicU64,
 }
 
 impl Default for GameState {
@@ -37,6 +41,9 @@ impl Default for GameState {
         Self {
             pending_strafe: Mutex::new(None),
             require_shot: AtomicBool::new(false),
+            key_bindings: RwLock::new(ActiveKeyBindings::default()),
+            perfect_threshold_micros: AtomicU64::new(DEFAULT_PERFECT_THRESHOLD_MICROS),
+            max_eval_micros: AtomicU64::new(DEFAULT_MAX_EVAL_MICROS),
         }
     }
 }
@@ -290,7 +297,10 @@ fn eval_understrafe(
     game_state: &GameState,
     handle: &AppHandle,
 ) {
-    if time_passed < MAX_EVAL_MICROS && time_passed > PERFECT_THRESHOLD_MICROS {
+    let max_eval = game_state.max_eval_micros.load(Ordering::Relaxed) as u128;
+    let perfect_thresh = game_state.perfect_threshold_micros.load(Ordering::Relaxed) as u128;
+
+    if time_passed < max_eval && time_passed > perfect_thresh {
         register_strafe(
             "Early",
             time_passed,
@@ -300,7 +310,7 @@ fn eval_understrafe(
             game_state,
             handle,
         );
-    } else if time_passed <= PERFECT_THRESHOLD_MICROS {
+    } else if time_passed <= perfect_thresh {
         register_strafe(
             "Perfect",
             0,
@@ -355,20 +365,35 @@ pub fn handle_overlap_eval(
         if let Some(start) = state.both_pressed_time.take() {
             if let Ok(elapsed) = start.elapsed() {
                 let time_passed = elapsed.as_micros();
-                if time_passed < MAX_EVAL_MICROS {
+                let max_eval = game_state.max_eval_micros.load(Ordering::Relaxed) as u128;
+                let perfect_thresh = game_state.perfect_threshold_micros.load(Ordering::Relaxed) as u128;
+
+                if time_passed < max_eval {
                     let direction = state.overlap_initial_direction.unwrap_or("LeftToRight");
                     let movement_duration = state.overlap_movement_duration;
                     let was_diag = state.overlap_is_diagonal || is_diagonal;
 
-                    register_strafe(
-                        "Late",
-                        time_passed,
-                        movement_duration,
-                        direction,
-                        was_diag,
-                        game_state,
-                        handle,
-                    );
+                    if time_passed <= perfect_thresh {
+                        register_strafe(
+                            "Perfect",
+                            0,
+                            movement_duration,
+                            direction,
+                            was_diag,
+                            game_state,
+                            handle,
+                        );
+                    } else {
+                        register_strafe(
+                            "Late",
+                            time_passed,
+                            movement_duration,
+                            direction,
+                            was_diag,
+                            game_state,
+                            handle,
+                        );
+                    }
                 }
             }
         }

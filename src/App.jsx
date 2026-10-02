@@ -6,13 +6,17 @@ import StrafeChart from "./components/StrafeChart";
 import KeyVisualizer from "./components/KeyVisualizer";
 import StrafeHistoryBar from "./components/StrafeHistoryBar";
 import Cs2MetricsCard from "./components/Cs2MetricsCard";
+import SettingsModal from "./components/SettingsModal";
 import { getCs2Metrics } from "./utils/cs2Physics";
+import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
 import "./App.css";
 
 export default function App() {
   const [totalStrafes, setTotalStrafes] = createSignal([]);
   const [directionFilter, setDirectionFilter] = createSignal("all");
   const [requireShotOnly, setRequireShotOnly] = createSignal(false);
+  const [settings, setSettings] = createSignal(loadSettings());
+  const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
 
   function resetStrafes() {
     setTotalStrafes([]);
@@ -25,6 +29,20 @@ export default function App() {
       await invoke("set_require_shot", { requireShot: next });
     } catch (e) {
       console.error("Failed to update require_shot state:", e);
+    }
+  }
+
+  async function handleSaveSettings(newSettings) {
+    setSettings(newSettings);
+    saveSettings(newSettings);
+    try {
+      await invoke("set_monitored_keys", { keys: newSettings.keys });
+      await invoke("set_thresholds", {
+        perfectThresholdMs: newSettings.perfectThresholdMs,
+        maxStrafeMs: newSettings.maxStrafeMs,
+      });
+    } catch (e) {
+      console.error("Failed to sync settings to backend:", e);
     }
   }
 
@@ -58,7 +76,32 @@ export default function App() {
   onMount(() => {
     let unlistenStrafe;
 
-    const setupListener = async () => {
+    const setupApp = async () => {
+      // Check if user has stored settings. If not, adapt defaults to backend detected layout
+      const hasStoredSettings = Boolean(localStorage.getItem("strafe_evaluation_settings"));
+      let current = settings();
+
+      try {
+        const backendSettings = await invoke("get_settings");
+        if (!hasStoredSettings && backendSettings?.detected_layout === "AZERTY") {
+          current = {
+            ...current,
+            keys: { ...PRESETS.azerty.keys },
+          };
+          setSettings(current);
+          saveSettings(current);
+        }
+
+        // Sync initial settings to backend
+        await invoke("set_monitored_keys", { keys: current.keys });
+        await invoke("set_thresholds", {
+          perfectThresholdMs: current.perfectThresholdMs,
+          maxStrafeMs: current.maxStrafeMs,
+        });
+      } catch (e) {
+        console.error("Initial settings sync error:", e);
+      }
+
       unlistenStrafe = await listen("strafe", (event) => {
         const payload = event.payload;
         const strafe = {
@@ -74,7 +117,7 @@ export default function App() {
       });
     };
 
-    setupListener();
+    setupApp();
 
     onCleanup(() => {
       if (typeof unlistenStrafe === "function") {
@@ -86,13 +129,29 @@ export default function App() {
   return (
     <div className="w-screen h-screen bg-bright text-dark flex flex-col justify-between overflow-hidden">
       {/* Header */}
-      <div className="flex justify-center items-center select-none pointer-events-none py-2">
-        <h1 className="mr-3 drop-shadow-lg text-3xl font-bold text-center text-bright text-stroke italic">
-          PatrikZero's
-        </h1>
-        <h1 className="text-3xl font-bold text-center">
-          Strafe Evaluation <span className="text-sm font-semibold px-2 py-0.5 rounded bg-primary text-white ml-2">CS2 Engine</span>
-        </h1>
+      <div className="flex justify-between items-center px-6 py-2">
+        <div className="w-9" />
+
+        <div className="flex justify-center items-center select-none pointer-events-none">
+          <h1 className="mr-3 drop-shadow-lg text-3xl font-bold text-center text-bright text-stroke italic">
+            PatrikZero's
+          </h1>
+          <h1 className="text-3xl font-bold text-center">
+            Strafe Evaluation{" "}
+            <span className="text-sm font-semibold px-2 py-0.5 rounded bg-primary text-white ml-2">
+              CS2 Engine
+            </span>
+          </h1>
+        </div>
+
+        <button
+          type="button"
+          className="w-9 h-9 rounded-lg bg-secondary/50 hover:bg-secondary text-dark flex items-center justify-center text-lg transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+          onClick={() => setIsSettingsOpen(true)}
+          title="Paramètres & Tolérances (Touches, Marge Perfect, Objectifs)"
+        >
+          ⚙️
+        </button>
       </div>
 
       {/* Main dashboard content */}
@@ -181,17 +240,26 @@ export default function App() {
             earlyStrafes={earlyStrafes()}
             lateStrafes={lateStrafes()}
             perfectStrafes={perfectStrafes()}
+            visualGoals={settings().visualGoals}
           />
         </div>
       </div>
 
-      {/* Center visualizer: WASD + Mouse1 */}
+      {/* Center visualizer: Keys + Mouse1 */}
       <div className="h-28 flex items-center justify-center my-1">
-        <KeyVisualizer />
+        <KeyVisualizer keys={settings().keys} />
       </div>
 
       {/* Bottom history bar */}
       <StrafeHistoryBar strafes={filteredStrafes()} />
+
+      {/* Settings & Tolerances modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen()}
+        onClose={() => setIsSettingsOpen(false)}
+        currentSettings={settings()}
+        onSave={handleSaveSettings}
+      />
     </div>
   );
 }
