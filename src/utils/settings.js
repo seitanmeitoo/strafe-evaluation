@@ -22,6 +22,12 @@ export const PRESETS = {
   },
 };
 
+export const STRAFE_COLORS = {
+  early: "#38bdf8", // Cyan / Electric blue
+  late: "#fb923c",  // Orange / Amber
+  perfect: "#34d399", // Emerald green
+};
+
 export const DEFAULT_SETTINGS = {
   keys: {
     left: "A",
@@ -35,6 +41,11 @@ export const DEFAULT_SETTINGS = {
     enabled: true,
     earlyTargetMs: 15,
     lateTargetMs: 20,
+  },
+  theme: "dark",
+  audio: {
+    enabled: true,
+    volume: 0.5,
   },
 };
 
@@ -106,6 +117,17 @@ export function loadSettings() {
           typeof parsed.visualGoals?.lateTargetMs === "number"
             ? parsed.visualGoals.lateTargetMs
             : DEFAULT_SETTINGS.visualGoals.lateTargetMs,
+      },
+      theme: parsed.theme === "light" ? "light" : "dark",
+      audio: {
+        enabled:
+          typeof parsed.audio?.enabled === "boolean"
+            ? parsed.audio.enabled
+            : DEFAULT_SETTINGS.audio.enabled,
+        volume:
+          typeof parsed.audio?.volume === "number"
+            ? parsed.audio.volume
+            : DEFAULT_SETTINGS.audio.volume,
       },
     };
   } catch (err) {

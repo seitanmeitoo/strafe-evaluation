@@ -7,8 +7,12 @@ import KeyVisualizer from "./components/KeyVisualizer";
 import StrafeHistoryBar from "./components/StrafeHistoryBar";
 import Cs2MetricsCard from "./components/Cs2MetricsCard";
 import SettingsModal from "./components/SettingsModal";
+import SessionsModal from "./components/SessionsModal";
 import { getCs2Metrics } from "./utils/cs2Physics";
 import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
+import { playStrafeSound } from "./utils/audio";
+import { exportStrafesToCsv } from "./utils/exportCsv";
+import { saveSessionSnapshot } from "./utils/sessions";
 import "./App.css";
 
 export default function App() {
@@ -17,9 +21,31 @@ export default function App() {
   const [requireShotOnly, setRequireShotOnly] = createSignal(false);
   const [settings, setSettings] = createSignal(loadSettings());
   const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
+  const [isSessionsOpen, setIsSessionsOpen] = createSignal(false);
 
   function resetStrafes() {
+    const list = totalStrafes();
+    if (list.length >= 3) {
+      // Auto-archive current session before resetting
+      saveSessionSnapshot(list);
+    }
     setTotalStrafes([]);
+  }
+
+  function handleSaveCurrentSession() {
+    const list = totalStrafes();
+    if (list.length === 0) {
+      alert("Aucun strafe à enregistrer pour le moment.");
+      return;
+    }
+    const saved = saveSessionSnapshot(list);
+    if (saved) {
+      alert(`Session de ${saved.totalStrafes} strafes sauvegardée avec succès !`);
+    }
+  }
+
+  function handleExportCsv() {
+    exportStrafesToCsv(filteredStrafes());
   }
 
   async function toggleRequireShot() {
@@ -45,6 +71,15 @@ export default function App() {
       console.error("Failed to sync settings to backend:", e);
     }
   }
+
+  function toggleTheme() {
+    const nextTheme = settings().theme === "light" ? "dark" : "light";
+    const updated = { ...settings(), theme: nextTheme };
+    setSettings(updated);
+    saveSettings(updated);
+  }
+
+  const isDark = () => settings().theme !== "light";
 
   const filteredStrafes = createMemo(() => {
     const list = totalStrafes();
@@ -77,8 +112,9 @@ export default function App() {
     let unlistenStrafe;
 
     const setupApp = async () => {
-      // Check if user has stored settings. If not, adapt defaults to backend detected layout
-      const hasStoredSettings = Boolean(localStorage.getItem("strafe_evaluation_settings"));
+      const hasStoredSettings = Boolean(
+        localStorage.getItem("strafe_evaluation_settings")
+      );
       let current = settings();
 
       try {
@@ -92,7 +128,6 @@ export default function App() {
           saveSettings(current);
         }
 
-        // Sync initial settings to backend
         await invoke("set_monitored_keys", { keys: current.keys });
         await invoke("set_thresholds", {
           perfectThresholdMs: current.perfectThresholdMs,
@@ -111,7 +146,13 @@ export default function App() {
           movement_duration: payload.movement_duration,
           direction: payload.direction || "LeftToRight",
           is_diagonal: Boolean(payload.is_diagonal),
+          timestamp: new Date().toISOString(),
         };
+
+        // Audio feedback on strafe completion
+        if (settings().audio?.enabled) {
+          playStrafeSound(strafe.type, settings().audio?.volume ?? 0.5);
+        }
 
         setTotalStrafes((prev) => [strafe, ...prev]);
       });
@@ -127,48 +168,104 @@ export default function App() {
   });
 
   return (
-    <div className="w-screen h-screen bg-bright text-dark flex flex-col justify-between overflow-hidden">
+    <div
+      className={`w-screen h-screen flex flex-col justify-between overflow-hidden transition-colors duration-200 ${
+        isDark() ? "bg-[#0f172a] text-slate-100 dark" : "bg-slate-100 text-slate-800"
+      }`}
+    >
       {/* Header */}
-      <div className="flex justify-between items-center px-6 py-2">
-        <div className="w-9" />
+      <div
+        className={`flex justify-between items-center px-6 py-2 border-b ${
+          isDark()
+            ? "bg-[#0f172a] border-slate-800"
+            : "bg-white/80 border-slate-200"
+        }`}
+      >
+        {/* Left header actions: Sessions history & Theme toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={() => setIsSessionsOpen(true)}
+            title="Historique des sessions d'entraînement"
+          >
+            <span>📈</span>
+            <span>Sessions</span>
+          </button>
 
+          <button
+            type="button"
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all cursor-pointer border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={toggleTheme}
+            title={isDark() ? "Passer en mode Clair" : "Passer en mode Sombre"}
+          >
+            {isDark() ? "🌙" : "☀️"}
+          </button>
+        </div>
+
+        {/* Center: Title */}
         <div className="flex justify-center items-center select-none pointer-events-none">
-          <h1 className="mr-3 drop-shadow-lg text-3xl font-bold text-center text-bright text-stroke italic">
+          <h1 className="mr-3 drop-shadow-lg text-2xl font-bold text-center text-slate-200 text-stroke italic">
             PatrikZero's
           </h1>
-          <h1 className="text-3xl font-bold text-center">
+          <h1 className="text-2xl font-bold text-center tracking-wide">
             Strafe Evaluation{" "}
-            <span className="text-sm font-semibold px-2 py-0.5 rounded bg-primary text-white ml-2">
-              CS2 Engine
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-sky-500 text-white ml-2">
+              CS2 Engine v1.4
             </span>
           </h1>
         </div>
 
-        <button
-          type="button"
-          className="w-9 h-9 rounded-lg bg-secondary/50 hover:bg-secondary text-dark flex items-center justify-center text-lg transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
-          onClick={() => setIsSettingsOpen(true)}
-          title="Paramètres & Tolérances (Touches, Marge Perfect, Objectifs)"
-        >
-          ⚙️
-        </button>
+        {/* Right header actions: Settings */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all cursor-pointer shadow-sm border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={() => setIsSettingsOpen(true)}
+            title="Paramètres & Tolérances (Touches, Marge Perfect, Audio)"
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
 
       {/* Main dashboard content */}
-      <div className="justify-between flex-grow flex px-4 gap-4 overflow-hidden">
+      <div className="justify-between flex-grow flex px-4 gap-4 overflow-hidden py-2">
         {/* Left column: Controls, CS2 Metrics & Detailed Stats */}
-        <div className="flex flex-col rounded-xl border-t border-white p-4 w-[50%] bg-secondary/50 shadow-xl overflow-y-auto">
+        <div
+          className={`flex flex-col rounded-2xl p-4 w-[50%] shadow-xl overflow-y-auto border ${
+            isDark()
+              ? "bg-[#1e293b]/85 border-slate-700/60"
+              : "bg-white border-slate-200"
+          }`}
+        >
           <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-            <h2 className="select-none text-xl font-bold">Statistics</h2>
+            <h2 className="select-none text-lg font-bold tracking-tight">Statistiques</h2>
 
             {/* Direction filter segmented control */}
-            <div className="flex items-center gap-1 bg-dark/10 p-1 rounded-lg text-xs font-semibold select-none">
+            <div
+              className={`flex items-center gap-1 p-1 rounded-lg text-xs font-semibold select-none border ${
+                isDark() ? "bg-slate-900/60 border-slate-700/50" : "bg-slate-100 border-slate-200"
+              }`}
+            >
               <button
                 type="button"
                 className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                   directionFilter() === "all"
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-dark/70 hover:text-dark"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
                 onClick={() => setDirectionFilter("all")}
               >
@@ -178,8 +275,8 @@ export default function App() {
                 type="button"
                 className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                   directionFilter() === "LeftToRight"
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-dark/70 hover:text-dark"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
                 onClick={() => setDirectionFilter("LeftToRight")}
               >
@@ -189,8 +286,8 @@ export default function App() {
                 type="button"
                 className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                   directionFilter() === "RightToLeft"
-                    ? "bg-primary text-white shadow-sm"
-                    : "text-dark/70 hover:text-dark"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-400 hover:text-slate-200"
                 }`}
                 onClick={() => setDirectionFilter("RightToLeft")}
               >
@@ -198,14 +295,16 @@ export default function App() {
               </button>
             </div>
 
-            {/* Actions: require shot toggle & reset */}
-            <div className="flex items-center gap-2">
+            {/* Actions: Require shot toggle, CSV Export, Session save & Reset */}
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                className={`text-xs px-2.5 py-1 rounded-md border transition-all cursor-pointer select-none font-semibold ${
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
                   requireShotOnly()
-                    ? "bg-primary text-white border-primary shadow-sm"
-                    : "bg-white/40 text-dark/80 border-dark/20 hover:bg-white/60"
+                    ? "bg-sky-500 text-white border-sky-400 shadow-sm"
+                    : isDark()
+                    ? "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                    : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
                 }`}
                 onClick={toggleRequireShot}
                 title="Si activé, filtre pour n'enregistrer que les strafes accompagnés d'un tir mouse1"
@@ -214,9 +313,36 @@ export default function App() {
               </button>
 
               <button
-                className="text-bright text-xs font-semibold select-none shadow-md px-2.5 py-1 rounded-md bg-dark/80 hover:bg-dark cursor-pointer transition-all"
+                type="button"
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
+                  isDark()
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                }`}
+                onClick={handleExportCsv}
+                title="Exporter les données actuelles au format CSV"
+              >
+                📥 CSV
+              </button>
+
+              <button
+                type="button"
+                className={`text-xs px-2 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
+                  isDark()
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                }`}
+                onClick={handleSaveCurrentSession}
+                title="Sauvegarder la session actuelle dans l'historique"
+              >
+                💾
+              </button>
+
+              <button
+                className="text-white text-xs font-semibold select-none shadow-md px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 cursor-pointer transition-all"
                 type="button"
                 onClick={resetStrafes}
+                title="Réinitialiser et archiver la session"
               >
                 Reset
               </button>
@@ -234,31 +360,45 @@ export default function App() {
           />
         </div>
 
-        {/* Right column: Histogram Chart */}
-        <div className="flex flex-col justify-center rounded-xl w-[50%] p-2 bg-secondary/20 shadow-inner">
+        {/* Right column: Histogram Chart & Trend Mode */}
+        <div
+          className={`flex flex-col justify-center rounded-2xl w-[50%] p-3 shadow-xl border ${
+            isDark()
+              ? "bg-[#1e293b]/85 border-slate-700/60"
+              : "bg-white border-slate-200"
+          }`}
+        >
           <StrafeChart
             earlyStrafes={earlyStrafes()}
             lateStrafes={lateStrafes()}
             perfectStrafes={perfectStrafes()}
+            strafes={filteredStrafes()}
             visualGoals={settings().visualGoals}
+            theme={settings().theme}
           />
         </div>
       </div>
 
       {/* Center visualizer: Keys + Mouse1 */}
-      <div className="h-28 flex items-center justify-center my-1">
+      <div className="h-28 flex items-center justify-center my-0.5">
         <KeyVisualizer keys={settings().keys} />
       </div>
 
       {/* Bottom history bar */}
       <StrafeHistoryBar strafes={filteredStrafes()} />
 
-      {/* Settings & Tolerances modal */}
+      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen()}
         onClose={() => setIsSettingsOpen(false)}
         currentSettings={settings()}
         onSave={handleSaveSettings}
+      />
+
+      {/* Sessions History Modal */}
+      <SessionsModal
+        isOpen={isSessionsOpen()}
+        onClose={() => setIsSessionsOpen(false)}
       />
     </div>
   );

@@ -69,24 +69,24 @@ export default function KeyVisualizer(props) {
       <div className="flex flex-col basis-0 flex-grow items-end opacity-0 -translate-x-2 duration-200 group-hover:opacity-100 group-hover:translate-x-0">
         <button
           type="button"
-          className="wasd-button text-white bg-secondary cursor-pointer"
+          className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-sky-500 hover:bg-sky-400 text-white transition-all"
           onClick={simulateEarly}
         >
-          Early + Shot
+          Early + Tir
         </button>
         <button
           type="button"
-          className="wasd-button text-white bg-accent cursor-pointer"
+          className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-amber-500 hover:bg-amber-400 text-white transition-all"
           onClick={simulateLate}
         >
-          Late + Shot
+          Late + Tir
         </button>
         <button
           type="button"
-          className="wasd-button text-white bg-[#b5ac8c] cursor-pointer"
+          className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-emerald-500 hover:bg-emerald-400 text-white transition-all"
           onClick={simulatePerfect}
         >
-          Perfect + Shot
+          Perfect + Tir
         </button>
       </div>
 
@@ -96,10 +96,10 @@ export default function KeyVisualizer(props) {
           {/* Row 1: Forward */}
           <div
             className={
-              "flex border border-dark/20 shadow-md w-12 h-12 rounded-md justify-center items-center text-lg font-bold transition-all duration-75" +
+              "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center text-lg font-bold transition-all duration-75" +
               (wPressed()
-                ? " bg-accent/70 translate-y-[2px] shadow-inner text-white"
-                : " bg-zinc-200/40 text-dark")
+                ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
+                : " bg-slate-800 text-slate-200")
             }
           >
             {formatKeyDisplay(props.keys?.forward || "W")}
@@ -109,30 +109,30 @@ export default function KeyVisualizer(props) {
           <div className="flex gap-1 text-lg font-bold">
             <div
               className={
-                "flex border border-dark/20 shadow-md w-12 h-12 rounded-md justify-center items-center transition-all duration-75" +
+                "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center transition-all duration-75" +
                 (aPressed()
-                  ? " bg-accent/70 translate-y-[2px] shadow-inner text-white"
-                  : " bg-zinc-200/40 text-dark")
+                  ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
+                  : " bg-slate-800 text-slate-200")
               }
             >
               {formatKeyDisplay(props.keys?.left || "A")}
             </div>
             <div
               className={
-                "flex border border-dark/20 shadow-md w-12 h-12 rounded-md justify-center items-center transition-all duration-75" +
+                "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center transition-all duration-75" +
                 (sPressed()
-                  ? " bg-accent/70 translate-y-[2px] shadow-inner text-white"
-                  : " bg-zinc-200/40 text-dark")
+                  ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
+                  : " bg-slate-800 text-slate-200")
               }
             >
               {formatKeyDisplay(props.keys?.backward || "S")}
             </div>
             <div
               className={
-                "flex border border-dark/20 shadow-md w-12 h-12 rounded-md justify-center items-center transition-all duration-75" +
+                "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center transition-all duration-75" +
                 (dPressed()
-                  ? " bg-accent/70 translate-y-[2px] shadow-inner text-white"
-                  : " bg-zinc-200/40 text-dark")
+                  ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
+                  : " bg-slate-800 text-slate-200")
               }
             >
               {formatKeyDisplay(props.keys?.right || "D")}
@@ -144,10 +144,10 @@ export default function KeyVisualizer(props) {
         <div className="flex flex-col items-center justify-center">
           <div
             className={
-              "flex flex-col border border-dark/20 shadow-md w-14 h-20 rounded-t-2xl rounded-b-lg justify-center items-center text-xs font-bold transition-all duration-75" +
+              "flex flex-col border border-slate-700 shadow-md w-14 h-20 rounded-t-2xl rounded-b-lg justify-center items-center text-xs font-bold transition-all duration-75" +
               (m1Pressed()
-                ? " bg-primary translate-y-[3px] shadow-inner text-white"
-                : " bg-zinc-200/40 text-dark")
+                ? " bg-emerald-500 translate-y-[3px] shadow-inner text-white border-emerald-400"
+                : " bg-slate-800 text-slate-200")
             }
           >
             <span className="text-base">🖱️</span>
