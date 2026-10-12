@@ -26,6 +26,12 @@ export default function SettingsModal(props) {
   const [audioVolume, setAudioVolume] = createSignal(
     DEFAULT_SETTINGS.audio.volume
   );
+  const [overlayOpacity, setOverlayOpacity] = createSignal(
+    DEFAULT_SETTINGS.overlay.opacity
+  );
+  const [overlayAutoStart, setOverlayAutoStart] = createSignal(
+    DEFAULT_SETTINGS.overlay.autoStart
+  );
   const [activeRebind, setActiveRebind] = createSignal(null);
 
   // Sync state whenever modal is opened
@@ -43,6 +49,10 @@ export default function SettingsModal(props) {
         typeof s.audio?.enabled === "boolean" ? s.audio.enabled : true
       );
       setAudioVolume(typeof s.audio?.volume === "number" ? s.audio.volume : 0.5);
+      setOverlayOpacity(
+        typeof s.overlay?.opacity === "number" ? s.overlay.opacity : 0.85
+      );
+      setOverlayAutoStart(Boolean(s.overlay?.autoStart));
       setActiveRebind(null);
     }
   });
@@ -100,6 +110,8 @@ export default function SettingsModal(props) {
     setTheme(DEFAULT_SETTINGS.theme);
     setAudioEnabled(DEFAULT_SETTINGS.audio.enabled);
     setAudioVolume(DEFAULT_SETTINGS.audio.volume);
+    setOverlayOpacity(DEFAULT_SETTINGS.overlay.opacity);
+    setOverlayAutoStart(DEFAULT_SETTINGS.overlay.autoStart);
     setActiveRebind(null);
   }
 
@@ -117,6 +129,10 @@ export default function SettingsModal(props) {
       audio: {
         enabled: audioEnabled(),
         volume: Math.min(1, Math.max(0, Number(audioVolume()) || 0)),
+      },
+      overlay: {
+        opacity: Math.min(1, Math.max(0.3, Number(overlayOpacity()) || 0.85)),
+        autoStart: overlayAutoStart(),
       },
     });
     props.onClose();
@@ -255,6 +271,58 @@ export default function SettingsModal(props) {
                   </div>
                 </div>
               </Show>
+            </div>
+
+            {/* Mode Overlay HUD In-Game */}
+            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🪟</span>
+                  <span>Mode Overlay In-Game (HUD)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input
+                    type="checkbox"
+                    checked={overlayAutoStart()}
+                    onChange={(e) => setOverlayAutoStart(e.target.checked)}
+                    className="accent-sky-500 rounded cursor-pointer"
+                  />
+                  <span>Lancer au démarrage</span>
+                </label>
+              </div>
+
+              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-300">Opacité par défaut</span>
+                  <span className="text-xs font-mono font-bold text-sky-400">
+                    {Math.round(overlayOpacity() * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.3"
+                  max="1"
+                  step="0.05"
+                  className="w-full accent-sky-500 cursor-pointer"
+                  value={overlayOpacity()}
+                  onInput={(e) => setOverlayOpacity(parseFloat(e.target.value) || 0.85)}
+                />
+
+                {/* Shortcuts & Click-Through explanation */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Afficher / Masquer</div>
+                    <div className="text-xs font-mono font-bold text-sky-400 mt-0.5">Alt + O</div>
+                  </div>
+                  <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Verrouillage Click-Through</div>
+                    <div className="text-xs font-mono font-bold text-amber-400 mt-0.5">Ctrl + F11</div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  💡 En mode <strong>Pass-through (verrouillé)</strong>, vos clics traversent l'overlay pour viser et tirer dans CS2 sans interruption. Déverrouillez avec <kbd className="px-1 py-0.5 rounded bg-slate-800 font-mono text-[10px] text-slate-300">Ctrl + F11</kbd> pour le déplacer.
+                </p>
+              </div>
             </div>
 
             {/* Section 1: Key Rebinding */}

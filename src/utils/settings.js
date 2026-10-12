@@ -47,6 +47,10 @@ export const DEFAULT_SETTINGS = {
     enabled: true,
     volume: 0.5,
   },
+  overlay: {
+    opacity: 0.85,
+    autoStart: false,
+  },
 };
 
 const STORAGE_KEY = "strafe_evaluation_settings";
@@ -128,6 +132,16 @@ export function loadSettings() {
           typeof parsed.audio?.volume === "number"
             ? parsed.audio.volume
             : DEFAULT_SETTINGS.audio.volume,
+      },
+      overlay: {
+        opacity:
+          typeof parsed.overlay?.opacity === "number"
+            ? Math.max(0.3, Math.min(1.0, parsed.overlay.opacity))
+            : DEFAULT_SETTINGS.overlay.opacity,
+        autoStart:
+          typeof parsed.overlay?.autoStart === "boolean"
+            ? parsed.overlay.autoStart
+            : DEFAULT_SETTINGS.overlay.autoStart,
       },
     };
   } catch (err) {

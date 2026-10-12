@@ -30,3 +30,24 @@
  .wasd-button {
    @apply shadow-md font-medium px-3 w-20 py-1 my-1 cursor-pointer rounded-md hover:scale-105
  }
+
+ body.overlay-mode,
+ html.overlay-mode {
+   background-color: transparent !important;
+   background: transparent !important;
+   overflow: hidden !important;
+   user-select: none;
+ }
+
+ .hud-glass {
+   backdrop-filter: blur(8px);
+   -webkit-backdrop-filter: blur(8px);
+ }
+
+ .glow-perfect {
+   box-shadow: 0 0 12px rgba(52, 211, 153, 0.45);
+ }
+
+ .glow-streak {
+   box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+ }

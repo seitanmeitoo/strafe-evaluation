@@ -2,9 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod keyboard;
+mod overlay;
 mod tracker;
 
 use keyboard::{ActiveKeyBindings, KeyboardLayout, MonitoredKeys};
+use overlay::{
+    check_overlay_hotkeys, HotkeyTracker, OverlayState, OverlayStatePayload, set_overlay_lock,
+    set_overlay_visibility, toggle_overlay_lock, toggle_overlay_visibility,
+};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -70,23 +75,69 @@ fn get_settings(state: tauri::State<Arc<GameState>>) -> Result<SettingsPayload, 
     })
 }
 
+#[tauri::command]
+fn toggle_overlay(
+    open: Option<bool>,
+    handle: tauri::AppHandle,
+    state: tauri::State<Arc<OverlayState>>,
+) -> Result<bool, String> {
+    match open {
+        Some(v) => set_overlay_visibility(&handle, &state, v),
+        None => toggle_overlay_visibility(&handle, &state),
+    }
+}
+
+#[tauri::command]
+fn set_overlay_click_through(
+    ignore: bool,
+    handle: tauri::AppHandle,
+    state: tauri::State<Arc<OverlayState>>,
+) -> Result<bool, String> {
+    set_overlay_lock(&handle, &state, ignore)
+}
+
+#[tauri::command]
+fn toggle_overlay_lock_cmd(
+    handle: tauri::AppHandle,
+    state: tauri::State<Arc<OverlayState>>,
+) -> Result<bool, String> {
+    toggle_overlay_lock(&handle, &state)
+}
+
+#[tauri::command]
+fn get_overlay_state(state: tauri::State<Arc<OverlayState>>) -> Result<OverlayStatePayload, String> {
+    Ok(OverlayStatePayload {
+        is_open: state.is_open.load(Ordering::Relaxed),
+        is_locked: state.is_locked.load(Ordering::Relaxed),
+    })
+}
+
 fn main() {
     let game_state = Arc::new(GameState::new());
     let thread_game_state = Arc::clone(&game_state);
 
+    let overlay_state = Arc::new(OverlayState::default());
+    let thread_overlay_state = Arc::clone(&overlay_state);
+
     tauri::Builder::default()
         .manage(game_state)
+        .manage(overlay_state)
         .invoke_handler(tauri::generate_handler![
             set_require_shot,
             set_monitored_keys,
             set_thresholds,
-            get_settings
+            get_settings,
+            toggle_overlay,
+            set_overlay_click_through,
+            toggle_overlay_lock_cmd,
+            get_overlay_state
         ])
         .setup(move |app| {
             let handle = app.handle();
 
             std::thread::spawn(move || {
                 let mut state = TrackerState::default();
+                let mut hotkey_tracker = HotkeyTracker::default();
 
                 loop {
                     std::thread::sleep(Duration::from_micros(500));
@@ -120,6 +171,7 @@ fn main() {
                     );
                     handle_overlap_eval(is_diagonal, &mut state, &thread_game_state, &handle);
                     check_pending_timeout(&thread_game_state, &handle);
+                    check_overlay_hotkeys(&handle, &thread_overlay_state, &mut hotkey_tracker);
                 }
             });
 

@@ -1,5 +1,5 @@
 import { createSignal, createMemo, onMount, onCleanup } from "solid-js";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import StatsTable from "./components/StatsTable";
 import StrafeChart from "./components/StrafeChart";
@@ -22,6 +22,8 @@ export default function App() {
   const [settings, setSettings] = createSignal(loadSettings());
   const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
   const [isSessionsOpen, setIsSessionsOpen] = createSignal(false);
+  const [isOverlayOpen, setIsOverlayOpen] = createSignal(false);
+  const [isOverlayLocked, setIsOverlayLocked] = createSignal(false);
 
   function resetStrafes() {
     const list = totalStrafes();
@@ -30,6 +32,7 @@ export default function App() {
       saveSessionSnapshot(list);
     }
     setTotalStrafes([]);
+    emit("strafe-reset", {}).catch(() => {});
   }
 
   function handleSaveCurrentSession() {
@@ -55,6 +58,25 @@ export default function App() {
       await invoke("set_require_shot", { requireShot: next });
     } catch (e) {
       console.error("Failed to update require_shot state:", e);
+    }
+  }
+
+  async function toggleOverlay() {
+    const next = !isOverlayOpen();
+    try {
+      const res = await invoke("toggle_overlay", { open: next });
+      setIsOverlayOpen(res);
+    } catch (e) {
+      console.error("Failed to toggle overlay:", e);
+    }
+  }
+
+  async function toggleOverlayLock() {
+    try {
+      const res = await invoke("toggle_overlay_lock_cmd");
+      setIsOverlayLocked(res);
+    } catch (e) {
+      console.error("Failed to toggle overlay lock:", e);
     }
   }
 
@@ -133,6 +155,17 @@ export default function App() {
           perfectThresholdMs: current.perfectThresholdMs,
           maxStrafeMs: current.maxStrafeMs,
         });
+
+        // Initialize and sync Overlay state
+        const overlayState = await invoke("get_overlay_state");
+        if (overlayState) {
+          setIsOverlayOpen(Boolean(overlayState.is_open));
+          setIsOverlayLocked(Boolean(overlayState.is_locked));
+        }
+        if (current.overlay?.autoStart && !overlayState?.is_open) {
+          const res = await invoke("toggle_overlay", { open: true });
+          setIsOverlayOpen(res);
+        }
       } catch (e) {
         console.error("Initial settings sync error:", e);
       }
@@ -156,13 +189,30 @@ export default function App() {
 
         setTotalStrafes((prev) => [strafe, ...prev]);
       });
+
+      const unlistenOverlayVis = await listen("overlay-visibility-toggled", (e) => {
+        setIsOverlayOpen(Boolean(e.payload?.visible));
+      });
+
+      const unlistenOverlayLock = await listen("overlay-lock-toggled", (e) => {
+        setIsOverlayLocked(Boolean(e.payload?.is_locked));
+      });
+
+      unlistenOverlay = () => {
+        unlistenOverlayVis();
+        unlistenOverlayLock();
+      };
     };
 
+    let unlistenOverlay;
     setupApp();
 
     onCleanup(() => {
       if (typeof unlistenStrafe === "function") {
         unlistenStrafe();
+      }
+      if (typeof unlistenOverlay === "function") {
+        unlistenOverlay();
       }
     });
   });
@@ -224,8 +274,59 @@ export default function App() {
           </h1>
         </div>
 
-        {/* Right header actions: Settings */}
+        {/* Right header actions: Overlay HUD toggle, Lock toggle & Settings */}
         <div className="flex items-center gap-2">
+          {/* Overlay In-Game Button */}
+          <button
+            type="button"
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
+              isOverlayOpen()
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-emerald-950/20"
+                : isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={toggleOverlay}
+            title={
+              isOverlayOpen()
+                ? "Masquer l'Overlay In-Game (Raccourci global : Alt + O)"
+                : "Activer l'Overlay In-Game transparent Always-on-Top (Raccourci global : Alt + O)"
+            }
+          >
+            <span>🪟</span>
+            <span>Overlay</span>
+            <span
+              className={`w-2 h-2 rounded-full transition-colors ${
+                isOverlayOpen() ? "bg-emerald-300 animate-pulse" : "bg-slate-500"
+              }`}
+            />
+          </button>
+
+          {/* Quick Click-Through lock toggle if overlay is open */}
+          {isOverlayOpen() && (
+            <button
+              type="button"
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
+                isOverlayLocked()
+                  ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500"
+                  : isDark()
+                  ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                  : "bg-white hover:bg-slate-50 text-amber-700 border-slate-300"
+              }`}
+              onClick={toggleOverlayLock}
+              title={
+                isOverlayLocked()
+                  ? "Mode Jeu (Click-Through actif). Les clics traversent l'overlay vers CS2. (Raccourci : Ctrl + F11)"
+                  : "Mode Réglage (Déplacement possible). Cliquez pour verrouiller les clics. (Raccourci : Ctrl + F11)"
+              }
+            >
+              <span>{isOverlayLocked() ? "🔒" : "🔓"}</span>
+              <span className="hidden sm:inline">
+                {isOverlayLocked() ? "Pass-through" : "Déplacement"}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             className={`w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all cursor-pointer shadow-sm border ${
@@ -234,7 +335,7 @@ export default function App() {
                 : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
             }`}
             onClick={() => setIsSettingsOpen(true)}
-            title="Paramètres & Tolérances (Touches, Marge Perfect, Audio)"
+            title="Paramètres & Tolérances (Touches, Marge Perfect, Audio, Overlay)"
           >
             ⚙️
           </button>
