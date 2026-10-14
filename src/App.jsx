@@ -1,411 +1,542 @@
-import { createSignal, onMount, createEffect, onCleanup, For } from "solid-js";
+import { createSignal, createMemo, onMount, onCleanup } from "solid-js";
+import { listen, emit } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/tauri";
+import StatsTable from "./components/StatsTable";
+import StrafeChart from "./components/StrafeChart";
+import KeyVisualizer from "./components/KeyVisualizer";
+import StrafeHistoryBar from "./components/StrafeHistoryBar";
+import Cs2MetricsCard from "./components/Cs2MetricsCard";
+import SettingsModal from "./components/SettingsModal";
+import SessionsModal from "./components/SessionsModal";
+import { getCs2Metrics } from "./utils/cs2Physics";
+import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
+import { playStrafeSound } from "./utils/audio";
+import { exportStrafesToCsv } from "./utils/exportCsv";
+import { saveSessionSnapshot } from "./utils/sessions";
+import { t, language, setLanguage } from "./i18n";
 import "./App.css";
-import { Chart, registerables } from 'chart.js'
-import { Bar } from 'solid-chartjs'
-import { listen } from '@tauri-apps/api/event'
 
-function draw_time(time) {
-  return (time / 1000).toFixed(0) + " ms"
-}
+export default function App() {
+  const [totalStrafes, setTotalStrafes] = createSignal([]);
+  const [directionFilter, setDirectionFilter] = createSignal("all");
+  const [requireShotOnly, setRequireShotOnly] = createSignal(false);
+  const [settings, setSettings] = createSignal(loadSettings());
+  const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
+  const [isSessionsOpen, setIsSessionsOpen] = createSignal(false);
+  const [isOverlayOpen, setIsOverlayOpen] = createSignal(false);
+  const [isOverlayLocked, setIsOverlayLocked] = createSignal(false);
 
-function getMeanAndVar(arr) {
-
-  var sum = arr.reduce(function (pre, cur) {
-    return pre + cur;
-  })
-  let num = arr.length
-  var average = sum / num;
-
-  let variance = 0;
-  arr.forEach(num => {
-    variance += ((num - average) * (num - average));
-  });
-  variance /= num;
-  variance = Math.sqrt(variance)
-
-  var res = {
-    average: average,
-    std_deviation: variance
+  function resetStrafes() {
+    const list = totalStrafes();
+    if (list.length >= 3) {
+      saveSessionSnapshot(list);
+    }
+    setTotalStrafes([]);
+    emit("strafe-reset", {}).catch(() => {});
   }
 
-  return res
-}
-
-function getStats(duration_array) {
-  if (duration_array.length < 1) {
-    return { median: 0, min: 0, max: 0, average: 0, std_deviation: 0, samples: 0 }
-  }
-  const sorted = Array.from(duration_array).sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-
-  let median;
-  if (sorted.length % 2 === 0) {
-    median = (sorted[middle - 1] + sorted[middle]) / 2;
-  }
-  else median = sorted[middle]
-
-  let o = getMeanAndVar(duration_array)
-  return { median: median, min: sorted[0], max: sorted[sorted.length - 1], average: o.average, std_deviation: o.std_deviation, samples: duration_array.length }
-}
-
-function getOccurance(duration_array) {
-  if (!duration_array || duration_array.length == 0) {
-    console.log("Array too small for graph")
-    return [0]
-  }
-  let out = new Array(41).fill(0);
-
-  duration_array.map((x) => {
-    let n = Math.ceil(x / 5000)
-    out[n] = out[n] + 1
-  })
-
-  return out
-}
-
-const MyChart = (props) => {
-  const labels = Array.from({ length: 201 / 5 + 1 }, (_, i) => i * 5);
-  const [chartData, setChartData] = createSignal({
-    labels: labels,
-    datasets: [
-      {
-        label: 'Early',
-        data: getOccurance([]),
-        backgroundColor: "#a5c5ae",
-      },
-      {
-        label: 'Late',
-        data: [0],
-        borderRadius: 5,
-        backgroundColor: "#8cb5a8",
-      },
-    ],
-  })
-
-
-  onMount(() => {
-    Chart.register(...registerables)
-  })
-
-  createEffect(() => {
-    const { earlyStrafes, lateStrafes, perfectStrafes } = props;
-    setChartData({
-      labels: labels,
-      datasets: [
-        {
-          label: 'Early',
-          data: getOccurance(earlyStrafes),
-          borderRadius: 5,
-          backgroundColor: "#a5c5ae",
-        },
-        {
-          label: 'Late',
-          data: getOccurance(lateStrafes),
-          borderRadius: 5,
-          backgroundColor: "#8cb5a8",
-        },
-        {
-          label: 'Perfect',
-          data: [perfectStrafes.length],
-          borderRadius: 5,
-          backgroundColor: "#b5ac8c",
-        },
-      ],
-    })
-  })
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: true,
-    scales: {
-      x: {
-        stacked: true,
-      },
-      y: {
-        stacked: true
-      }
+  function handleSaveCurrentSession() {
+    const list = totalStrafes();
+    if (list.length === 0) {
+      alert(t("dashboard.noStrafeToSave"));
+      return;
+    }
+    const saved = saveSessionSnapshot(list);
+    if (saved) {
+      alert(t("dashboard.sessionSaved", { count: saved.totalStrafes }));
     }
   }
 
-  return (
-    <div>
-      <Bar data={chartData()} options={chartOptions} width={4} height={3} />
-    </div>
-  )
-}
+  function handleExportCsv() {
+    exportStrafesToCsv(filteredStrafes());
+  }
 
+  async function toggleRequireShot() {
+    const next = !requireShotOnly();
+    setRequireShotOnly(next);
+    try {
+      await invoke("set_require_shot", { requireShot: next });
+    } catch (e) {
+      console.error("Failed to update require_shot state:", e);
+    }
+  }
 
-function Stats(props) {
-  const [stats, setStats] = createSignal({ alls: getStats([]), early: getStats([]), late: getStats([]) }, { equals: false });
-  const [perfectCount, setPerfectCount] = createSignal(0)
+  async function toggleOverlay() {
+    const next = !isOverlayOpen();
+    try {
+      const res = await invoke("toggle_overlay", { open: next });
+      setIsOverlayOpen(res);
+    } catch (e) {
+      console.error("Failed to toggle overlay:", e);
+    }
+  }
 
+  async function toggleOverlayLock() {
+    try {
+      const res = await invoke("toggle_overlay_lock_cmd");
+      setIsOverlayLocked(res);
+    } catch (e) {
+      console.error("Failed to toggle overlay lock:", e);
+    }
+  }
 
-  createEffect(() => {
-    const { earlyStrafes, lateStrafes, perfectStrafes } = props;
-
-    setPerfectCount(perfectStrafes.length)
-    setStats((prev) => {
-      prev.alls = getStats([...earlyStrafes, ...lateStrafes, ...perfectStrafes])
-      prev.early = getStats(earlyStrafes)
-      prev.late = getStats(lateStrafes)
-      return prev
-    })
-  })
-
-
-
-
-  return (
-    <div className="flex flex-col justify-center items-center flex-grow">
-      <table style="width:100%">
-        <tbody className=" text-center">
-          <tr>
-            <th></th>
-            <th className="w-16">All</th>
-            <th className="w-16">Early</th>
-            <th className="w-16">Late</th>
-          </tr>
-          <tr>
-            <th>Median</th>
-            <td>{draw_time(stats().alls.median)}</td>
-            <td>{draw_time(stats().early.median)}</td>
-            <td>{draw_time(stats().late.median)}</td>
-          </tr>
-          <tr>
-            <th>Average</th>
-            <td>{draw_time(stats().alls.average)}</td>
-            <td>{draw_time(stats().early.average)}</td>
-            <td>{draw_time(stats().late.average)}</td>
-          </tr>
-          <tr>
-            <th>Min</th>
-            <td>{draw_time(stats().alls.min)}</td>
-            <td>{draw_time(stats().early.min)}</td>
-            <td>{draw_time(stats().late.min)}</td>
-          </tr>
-          <tr>
-            <th>Max</th>
-            <td>{draw_time(stats().alls.max)}</td>
-            <td>{draw_time(stats().early.max)}</td>
-            <td>{draw_time(stats().late.max)}</td>
-          </tr>
-          <tr>
-            <th>Std. Deviation</th>
-            <td>{draw_time(stats().alls.std_deviation)}</td>
-            <td>{draw_time(stats().early.std_deviation)}</td>
-            <td>{draw_time(stats().late.std_deviation)}</td>
-          </tr>
-          <tr>
-            <th>Samples</th>
-            <td>{(stats().alls.samples)}</td>
-            <td>{(stats().early.samples)}</td>
-            <td>{(stats().late.samples)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div className=" italic font-bold text-xl pt-4">
-        <h1>Perfect {perfectCount() + "x"}</h1>
-      </div>
-    </div>
-  )
-}
-
-function WASD() {
-  const [aPressed, setAPressed] = createSignal(false);
-  const [dPressed, setDPressed] = createSignal(false);
-
-  createEffect(() => {
-    let unlistenA
-    let unlistenReleaseA
-    let unlistenReleaseD
-    let unlistenD
-    const setupListeners = async () => {
-      unlistenA = await listen('a-pressed', (event) => {
-        setAPressed(true);
+  async function handleSaveSettings(newSettings) {
+    setSettings(newSettings);
+    saveSettings(newSettings);
+    if (newSettings.language) {
+      setLanguage(newSettings.language);
+    }
+    try {
+      await invoke("set_monitored_keys", { keys: newSettings.keys });
+      await invoke("set_thresholds", {
+        perfectThresholdMs: newSettings.perfectThresholdMs,
+        maxStrafeMs: newSettings.maxStrafeMs,
       });
+    } catch (e) {
+      console.error("Failed to sync settings to backend:", e);
+    }
+  }
 
-      unlistenD = await listen('d-pressed', (event) => {
-        setDPressed(true);
-      });
+  function toggleTheme() {
+    const nextTheme = settings().theme === "light" ? "dark" : "light";
+    const updated = { ...settings(), theme: nextTheme };
+    setSettings(updated);
+    saveSettings(updated);
+  }
 
-      unlistenReleaseA = await listen('a-released', (event) => {
-        setAPressed(false);
-      });
+  function toggleLanguage() {
+    const nextLang = language() === "fr" ? "en" : "fr";
+    setLanguage(nextLang);
+    const updated = { ...settings(), language: nextLang };
+    setSettings(updated);
+    saveSettings(updated);
+  }
 
-      unlistenReleaseD = await listen('d-released', (event) => {
-        setDPressed(false);
-      });
+  const isDark = () => settings().theme !== "light";
 
-    };
-
-    onCleanup(() => {
-      if (typeof unlistenA === "function") {
-        console.log("Cleaned up key listeners")
-        unlistenA();
-        unlistenReleaseA();
-        unlistenReleaseD();
-        unlistenD();
-      }
-    });
-    setupListeners();
+  const filteredStrafes = createMemo(() => {
+    const list = totalStrafes();
+    const filter = directionFilter();
+    if (filter === "all") return list;
+    return list.filter((s) => s.direction === filter);
   });
 
-  async function simulateEarly() {
-    setAPressed(true)
-    setTimeout(() => {
-      setAPressed(false)
-    }, 500);
-    setTimeout(() => {
-      setDPressed(true)
-    }, 850);
-    setTimeout(() => {
-      setDPressed(false)
-    }, 1350);
-  }
+  const earlyStrafes = createMemo(() =>
+    filteredStrafes()
+      .filter((s) => s.type === "Early")
+      .map((s) => s.duration)
+  );
 
-  async function simulateLate() {
-    setAPressed(true)
-    setTimeout(() => {
-      setDPressed(true)
-    }, 500);
-    setTimeout(() => {
-      setAPressed(false)
-    }, 850);
-    setTimeout(() => {
-      setDPressed(false)
-    }, 1350);
-  }
+  const lateStrafes = createMemo(() =>
+    filteredStrafes()
+      .filter((s) => s.type === "Late")
+      .map((s) => s.duration)
+  );
 
-  async function simulatePerfect() {
-    setAPressed(true)
-    setTimeout(() => {
-      setDPressed(true)
-    }, 500);
-    setTimeout(() => {
-      setAPressed(false)
-    }, 500);
-    setTimeout(() => {
-      setDPressed(false)
-    }, 1000);
-  }
+  const perfectStrafes = createMemo(() =>
+    filteredStrafes()
+      .filter((s) => s.type === "Perfect")
+      .map((s) => s.duration)
+  );
 
-  return (
-    <div className="flex group justify-center items-center w-full h-full   ">
+  const cs2Metrics = createMemo(() => getCs2Metrics(filteredStrafes()));
 
-      <div className="flex flex-col basis-0 flex-grow items-end opacity-0 -translate-x-2 duration-200 group-hover:opacity-100 group-hover:translate-x-0">
-        <button className="wasd-button text-white bg-secondary" onClick={simulateEarly}>Early</button>
-        <button className="wasd-button text-white bg-accent" onClick={simulateLate}>Late</button>
-        <button className="wasd-button text-white bg-[#b5ac8c]" onClick={simulatePerfect}>Perfect</button>
-      </div>
+  onMount(() => {
+    let unlistenStrafe;
 
-      <div className="flex justify-center basis-0 flex-grow">
-        <div className="select-none pointer-events-none text-dark flex justify-between w-40 text-center font-bold text-xl">
-          <div className={"flex  border-dark/10 border-r  border-b shadow-lg border-b-dark/50 w-16 h-16 rounded-md justify-center items-center duration-75" + (aPressed() ? " bg-accent/50 scale-100 translate-y-[4px]" : "bg-zinc-200/25 ")}>
-            <p>
-              A
-            </p>
-          </div>
-          <div className={"flex  border-dark/10 border-l  border-b shadow-lg border-b-dark/50 w-16 h-16 rounded-md justify-center items-center duration-75" + (dPressed() ? " bg-accent/50 translate-y-[4px]" : "bg-zinc-200/25")}>
-            <p>
-              D
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="basis-0 flex-grow bg-red-200 min-w-[200px] ">
+    const setupApp = async () => {
+      const hasStoredSettings = Boolean(
+        localStorage.getItem("strafe_evaluation_settings")
+      );
+      let current = settings();
 
-      </div>
+      if (current.language) {
+        setLanguage(current.language);
+      }
 
-
-    </div>
-  )
-}
-
-function App() {
-  const [totalStrafes, setTotalStrafes] = createSignal([]);
-  const [earlyStrafes, setEarlyStrafes] = createSignal([]);
-  const [lateStrafes, setLateStrafes] = createSignal([]);
-  const [perfectStrafes, setPerfectStrafes] = createSignal([]);
-
-  function resetStrafes() {
-    setEarlyStrafes([]);
-    setLateStrafes([]);
-    setPerfectStrafes([]);
-    setTotalStrafes([]);
-  }
-
-  createEffect(() => {
-    let unlistenStrafe
-    const setupListeners = async () => {
-      unlistenStrafe = await listen('strafe', (event) => {
-
-        let strafe = { type: event.payload.strafe_type, duration: event.payload.duration }
-        switch (strafe.type) {
-          case "Early":
-            setEarlyStrafes(a => [strafe.duration, ...a])
-            break;
-          case "Late":
-            setLateStrafes(a => [strafe.duration, ...a])
-            break;
-          case "Perfect":
-            setPerfectStrafes(a => [strafe.duration, ...a])
-            break;
+      try {
+        const backendSettings = await invoke("get_settings");
+        if (!hasStoredSettings && backendSettings?.detected_layout === "AZERTY") {
+          current = {
+            ...current,
+            keys: { ...PRESETS.azerty.keys },
+          };
+          setSettings(current);
+          saveSettings(current);
         }
-        setTotalStrafes(a => [strafe, ...a])
-      })
+
+        await invoke("set_monitored_keys", { keys: current.keys });
+        await invoke("set_thresholds", {
+          perfectThresholdMs: current.perfectThresholdMs,
+          maxStrafeMs: current.maxStrafeMs,
+        });
+
+        // Initialize and sync Overlay state
+        const overlayState = await invoke("get_overlay_state");
+        if (overlayState) {
+          setIsOverlayOpen(Boolean(overlayState.is_open));
+          setIsOverlayLocked(Boolean(overlayState.is_locked));
+        }
+        if (current.overlay?.autoStart && !overlayState?.is_open) {
+          const res = await invoke("toggle_overlay", { open: true });
+          setIsOverlayOpen(res);
+        }
+      } catch (e) {
+        console.error("Initial settings sync error:", e);
+      }
+
+      unlistenStrafe = await listen("strafe", (event) => {
+        const payload = event.payload;
+        const strafe = {
+          type: payload.strafe_type,
+          duration: payload.duration,
+          shot_delay: payload.shot_delay,
+          movement_duration: payload.movement_duration,
+          direction: payload.direction || "LeftToRight",
+          is_diagonal: Boolean(payload.is_diagonal),
+          timestamp: new Date().toISOString(),
+        };
+
+        // Audio feedback on strafe completion
+        if (settings().audio?.enabled) {
+          playStrafeSound(strafe.type, settings().audio?.volume ?? 0.5);
+        }
+
+        setTotalStrafes((prev) => [strafe, ...prev]);
+      });
+
+      const unlistenOverlayVis = await listen("overlay-visibility-toggled", (e) => {
+        setIsOverlayOpen(Boolean(e.payload?.visible));
+      });
+
+      const unlistenOverlayLock = await listen("overlay-lock-toggled", (e) => {
+        setIsOverlayLocked(Boolean(e.payload?.is_locked));
+      });
+
+      unlistenOverlay = () => {
+        unlistenOverlayVis();
+        unlistenOverlayLock();
+      };
     };
 
+    let unlistenOverlay;
+    setupApp();
 
     onCleanup(() => {
       if (typeof unlistenStrafe === "function") {
         unlistenStrafe();
       }
+      if (typeof unlistenOverlay === "function") {
+        unlistenOverlay();
+      }
     });
-    setupListeners();
   });
+
   return (
-    <div class="w-screen h-screen bg-bright text-dark flex flex-col">
-      {/* 1 */}
-      <div className="flex justify-center items-center select-none pointer-events-none">
+    <div
+      className={`w-screen h-screen flex flex-col justify-between overflow-hidden transition-colors duration-200 ${
+        isDark() ? "bg-[#0f172a] text-slate-100 dark" : "bg-slate-100 text-slate-800"
+      }`}
+    >
+      {/* Header */}
+      <div
+        className={`flex justify-between items-center px-6 py-2 border-b ${
+          isDark()
+            ? "bg-[#0f172a] border-slate-800"
+            : "bg-white/80 border-slate-200"
+        }`}
+      >
+        {/* Left header actions: Sessions history, Theme toggle & Language switcher */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={() => setIsSessionsOpen(true)}
+            title={t("sessions.title")}
+          >
+            <span>📈</span>
+            <span>{t("header.sessions")}</span>
+          </button>
 
-        <h1 className="mr-3 drop-shadow-lg  py-4 text-4xl pointer-events-none font-bold text-center text-bright text-stroke italic">PatrikZero's</h1>
-        <h1 className="  py-4 text-4xl font-bold text-center pointer-events-none ">Strafe Evaluation</h1>
-      </div>
+          <button
+            type="button"
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all cursor-pointer border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={toggleTheme}
+            title={isDark() ? t("header.themeLight") : t("header.themeDark")}
+          >
+            {isDark() ? "🌙" : "☀️"}
+          </button>
 
-      {/* 2 */}
-      <div className=" justify-between flex-grow flex">
-        {/* A */}
-        <div className="flex flex-col rounded-xl border-t border-white m-4 p-4 w-[50%] bg-secondary/50 shadow-xl">
-          <div className="flex justify-between mb-2">
-            <h2 className="select-none text-2xl font-bold">Statistics</h2>
-            <button className="text-bright select-none shadow-md px-2 rounded-md bg-primary hover:scale-110 " type="submit" onClick={() => {
-              resetStrafes()
-            }}>Reset</button>
-          </div>
-          <Stats earlyStrafes={earlyStrafes()} lateStrafes={lateStrafes()} perfectStrafes={perfectStrafes()}></Stats>
+          {/* Quick Language switcher */}
+          <button
+            type="button"
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={toggleLanguage}
+            title={language() === "fr" ? "Switch to English" : "Passer en Français"}
+          >
+            {language() === "fr" ? "🇫🇷 FR" : "🇬🇧 EN"}
+          </button>
         </div>
-        {/* B */}
-        <div className="flex  flex-col m-4 justify-center rounded-xl w-[50%] ">
-          <MyChart earlyStrafes={earlyStrafes()} lateStrafes={lateStrafes()} perfectStrafes={perfectStrafes()} ></MyChart>
+
+        {/* Center: Title */}
+        <div className="flex justify-center items-center select-none pointer-events-none">
+          <h1 className="mr-3 drop-shadow-lg text-2xl font-bold text-center text-slate-200 text-stroke italic">
+            {t("app.title")}
+          </h1>
+          <h1 className="text-2xl font-bold text-center tracking-wide">
+            {t("app.subtitle")}{" "}
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-sky-500 text-white ml-2">
+              {t("app.engineVersion")}
+            </span>
+          </h1>
+        </div>
+
+        {/* Right header actions: Overlay HUD toggle, Lock toggle & Settings */}
+        <div className="flex items-center gap-2">
+          {/* Overlay In-Game Button */}
+          <button
+            type="button"
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
+              isOverlayOpen()
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-emerald-950/20"
+                : isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={toggleOverlay}
+            title={
+              isOverlayOpen()
+                ? t("header.overlayHide")
+                : t("header.overlayShow")
+            }
+          >
+            <span>🪟</span>
+            <span>{t("header.overlay")}</span>
+            <span
+              className={`w-2 h-2 rounded-full transition-colors ${
+                isOverlayOpen() ? "bg-emerald-300 animate-pulse" : "bg-slate-500"
+              }`}
+            />
+          </button>
+
+          {/* Quick Click-Through lock toggle if overlay is open */}
+          {isOverlayOpen() && (
+            <button
+              type="button"
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
+                isOverlayLocked()
+                  ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500"
+                  : isDark()
+                  ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                  : "bg-white hover:bg-slate-50 text-amber-700 border-slate-300"
+              }`}
+              onClick={toggleOverlayLock}
+              title={
+                isOverlayLocked()
+                  ? t("header.lockModeGame")
+                  : t("header.lockModeEdit")
+              }
+            >
+              <span>{isOverlayLocked() ? "🔒" : "🔓"}</span>
+              <span className="hidden sm:inline">
+                {isOverlayLocked() ? t("header.passThrough") : t("header.draggable")}
+              </span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            className={`w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all cursor-pointer shadow-sm border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={() => setIsSettingsOpen(true)}
+            title={t("header.settings")}
+          >
+            ⚙️
+          </button>
         </div>
       </div>
 
-      {/* 3 */}
-      <div className="h-32 mb-4 flex items-center justify-center">
-        <WASD></WASD>
-      </div>
-      {/* 4 */}
-      <div className="flex  flex-row p-2 bg-accent/25 h-20 overflow-clip  w-full">
+      {/* Main dashboard content */}
+      <div className="justify-between flex-grow flex px-4 gap-4 overflow-hidden py-2">
+        {/* Left column: Controls, CS2 Metrics & Detailed Stats */}
+        <div
+          className={`flex flex-col rounded-2xl p-4 w-[50%] shadow-xl overflow-y-auto border ${
+            isDark()
+              ? "bg-[#1e293b]/85 border-slate-700/60"
+              : "bg-white border-slate-200"
+          }`}
+        >
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
+            <h2 className="select-none text-lg font-bold tracking-tight">
+              {t("dashboard.statsTitle")}
+            </h2>
 
-        <For each={totalStrafes()}>{(strafe, i) =>
-          <div className="flex shadow-md select-none flex-col border-bright/75 border-t bg-secondary/45 rounded-md  justify-center items-center  min-w-16 mr-2 ">
-            <p className="font-bold text-center">{strafe.type}</p>
-            <p className="text-center">{draw_time(strafe.duration)}</p>
+            {/* Direction filter segmented control */}
+            <div
+              className={`flex items-center gap-1 p-1 rounded-lg text-xs font-semibold select-none border ${
+                isDark() ? "bg-slate-900/60 border-slate-700/50" : "bg-slate-100 border-slate-200"
+              }`}
+            >
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  directionFilter() === "all"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                onClick={() => setDirectionFilter("all")}
+              >
+                {t("dashboard.filterAll")}
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  directionFilter() === "LeftToRight"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                onClick={() => setDirectionFilter("LeftToRight")}
+              >
+                {t("dashboard.filterAtoD")}
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  directionFilter() === "RightToLeft"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+                onClick={() => setDirectionFilter("RightToLeft")}
+              >
+                {t("dashboard.filterDtoA")}
+              </button>
+            </div>
+
+            {/* Actions: Require shot toggle, CSV Export, Session save & Reset */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
+                  requireShotOnly()
+                    ? "bg-sky-500 text-white border-sky-400 shadow-sm"
+                    : isDark()
+                    ? "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                    : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
+                }`}
+                onClick={toggleRequireShot}
+                title={t("dashboard.shotsOnlyTooltip")}
+              >
+                {requireShotOnly() ? t("dashboard.shotsOnly") : t("dashboard.shotsAll")}
+              </button>
+
+              <button
+                type="button"
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
+                  isDark()
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                }`}
+                onClick={handleExportCsv}
+                title={t("dashboard.csvTooltip")}
+              >
+                {t("dashboard.csvExport")}
+              </button>
+
+              <button
+                type="button"
+                className={`text-xs px-2 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
+                  isDark()
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+                }`}
+                onClick={handleSaveCurrentSession}
+                title={t("dashboard.saveSessionTooltip")}
+              >
+                {t("dashboard.saveSession")}
+              </button>
+
+              <button
+                className="text-white text-xs font-semibold select-none shadow-md px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 cursor-pointer transition-all"
+                type="button"
+                onClick={resetStrafes}
+                title={t("dashboard.resetTooltip")}
+              >
+                {t("dashboard.reset")}
+              </button>
+            </div>
           </div>
-        }</For>
+
+          {/* CS2 Tactical Precision Metrics */}
+          <Cs2MetricsCard metrics={cs2Metrics()} />
+
+          {/* Timing Stats Table */}
+          <StatsTable
+            earlyStrafes={earlyStrafes()}
+            lateStrafes={lateStrafes()}
+            perfectStrafes={perfectStrafes()}
+            colorblindMode={settings().colorblindMode}
+          />
+        </div>
+
+        {/* Right column: Histogram Chart & Trend Mode */}
+        <div
+          className={`flex flex-col justify-center rounded-2xl w-[50%] p-3 shadow-xl border ${
+            isDark()
+              ? "bg-[#1e293b]/85 border-slate-700/60"
+              : "bg-white border-slate-200"
+          }`}
+        >
+          <StrafeChart
+            earlyStrafes={earlyStrafes()}
+            lateStrafes={lateStrafes()}
+            perfectStrafes={perfectStrafes()}
+            strafes={filteredStrafes()}
+            visualGoals={settings().visualGoals}
+            theme={settings().theme}
+            colorblindMode={settings().colorblindMode}
+          />
+        </div>
       </div>
-    </div >
+
+      {/* Center visualizer: Keys + Mouse1 */}
+      <div className="h-28 flex items-center justify-center my-0.5">
+        <KeyVisualizer keys={settings().keys} />
+      </div>
+
+      {/* Bottom history bar */}
+      <StrafeHistoryBar
+        strafes={filteredStrafes()}
+        colorblindMode={settings().colorblindMode}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen()}
+        onClose={() => setIsSettingsOpen(false)}
+        currentSettings={settings()}
+        onSave={handleSaveSettings}
+      />
+
+      {/* Sessions History Modal */}
+      <SessionsModal
+        isOpen={isSessionsOpen()}
+        onClose={() => setIsSessionsOpen(false)}
+      />
+    </div>
   );
 }
-
-export default App;

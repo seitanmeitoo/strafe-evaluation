@@ -15,14 +15,31 @@
       "shell": {
         "all": false,
         "open": true
+      },
+      "window": {
+        "all": true
       }
     },
     "windows": [
       {
+        "label": "main",
         "title": "PatrikZero's Strafe Evaluation",
         "width": 800,
         "height": 620,
         "resizable": false
+      },
+      {
+        "label": "overlay",
+        "url": "index.html?overlay=true",
+        "title": "Strafe Overlay",
+        "width": 270,
+        "height": 135,
+        "resizable": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false
       }
     ],
     "security": {
