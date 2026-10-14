@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { appWindow, PhysicalPosition } from "@tauri-apps/api/window";
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
 import { playStrafeSound } from "../utils/audio";
-import { loadSettings, STRAFE_COLORS } from "../utils/settings";
+import { loadSettings, getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
+import { t, setLanguage } from "../i18n";
 import "../App.css";
 
 const OPACITY_STEPS = [0.95, 0.8, 0.6, 0.4];
@@ -16,7 +17,9 @@ export default function OverlayApp() {
   const [accurateShots, setAccurateShots] = createSignal(0);
   const [isLocked, setIsLocked] = createSignal(false);
   const [opacity, setOpacity] = createSignal(0.9);
-  const [settings] = createSignal(loadSettings());
+  const [settings, setSettings] = createSignal(loadSettings());
+
+  const colors = createMemo(() => getStrafeColors(settings().colorblindMode));
 
   const lastEvaluation = createMemo(() => {
     const s = lastStrafe();
@@ -70,6 +73,12 @@ export default function OverlayApp() {
   onMount(() => {
     document.documentElement.classList.add("overlay-mode");
     document.body.classList.add("overlay-mode");
+
+    const currentSettings = loadSettings();
+    setSettings(currentSettings);
+    if (currentSettings.language) {
+      setLanguage(currentSettings.language);
+    }
 
     // Load saved opacity
     try {
@@ -205,10 +214,10 @@ export default function OverlayApp() {
           <div
             data-tauri-drag-region
             className="flex items-center gap-1.5 cursor-move font-semibold text-[11px] text-slate-400 hover:text-slate-200 tracking-wide select-none"
-            title="Glisser pour déplacer l'overlay sur l'écran"
+            title={t("overlayApp.dragTooltip")}
           >
             <span className="text-slate-500 font-mono">⋮⋮</span>
-            <span>CS2 HUD</span>
+            <span>{t("overlayApp.dragHandle")}</span>
           </div>
 
           {/* Streak Badge */}
@@ -218,7 +227,7 @@ export default function OverlayApp() {
                 ? "bg-amber-500/25 text-amber-300 border border-amber-500/40 glow-streak"
                 : "bg-slate-800/60 text-slate-500"
             }`}
-            title="Série de strafes Perfect consécutifs"
+            title={t("overlayApp.streakTooltip")}
           >
             <span>🔥</span>
             <span>{perfectStreak()}</span>
@@ -230,7 +239,7 @@ export default function OverlayApp() {
               type="button"
               onClick={cycleOpacity}
               className="px-1.5 py-0.5 rounded bg-slate-800/70 hover:bg-slate-700 text-[10px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
-              title="Changer l'opacité (100% / 80% / 60% / 40%)"
+              title={t("overlayApp.opacityTooltip")}
             >
               {Math.round(opacity() * 100)}%
             </button>
@@ -245,8 +254,8 @@ export default function OverlayApp() {
               }`}
               title={
                 isLocked()
-                  ? "Mode Jeu (Click-Through actif). Raccourci : Ctrl + F11"
-                  : "Mode Réglage (Déplacement possible). Cliquez pour verrouiller les clics."
+                  ? t("overlayApp.lockActiveTooltip")
+                  : t("overlayApp.lockInactiveTooltip")
               }
             >
               {isLocked() ? "🔒" : "🔓"}
@@ -256,7 +265,7 @@ export default function OverlayApp() {
               type="button"
               onClick={handleClose}
               className="p-1 rounded bg-slate-800/80 hover:bg-rose-600/80 text-slate-400 hover:text-white text-[11px] transition-all cursor-pointer flex items-center justify-center leading-none"
-              title="Masquer l'overlay (Raccourci : Alt + O)"
+              title={t("overlayApp.closeTooltip")}
             >
               ✕
             </button>
@@ -274,31 +283,31 @@ export default function OverlayApp() {
                   style={{
                     "background-color":
                       lastStrafe().type === "Perfect"
-                        ? `${STRAFE_COLORS.perfect}26`
+                        ? `${colors().perfect}26`
                         : lastStrafe().type === "Early"
-                        ? `${STRAFE_COLORS.early}26`
-                        : `${STRAFE_COLORS.late}26`,
+                        ? `${colors().early}26`
+                        : `${colors().late}26`,
                     color:
                       lastStrafe().type === "Perfect"
-                        ? STRAFE_COLORS.perfect
+                        ? colors().perfect
                         : lastStrafe().type === "Early"
-                        ? STRAFE_COLORS.early
-                        : STRAFE_COLORS.late,
+                        ? colors().early
+                        : colors().late,
                     border: `1px solid ${
                       lastStrafe().type === "Perfect"
-                        ? `${STRAFE_COLORS.perfect}60`
+                        ? `${colors().perfect}60`
                         : lastStrafe().type === "Early"
-                        ? `${STRAFE_COLORS.early}60`
-                        : `${STRAFE_COLORS.late}60`
+                        ? `${colors().early}60`
+                        : `${colors().late}60`
                     }`,
                   }}
                 >
                   <span>
                     {lastStrafe().type === "Perfect"
-                      ? "★"
+                      ? STRAFE_SYMBOLS.perfect
                       : lastStrafe().type === "Early"
-                      ? "◀"
-                      : "▶"}
+                      ? STRAFE_SYMBOLS.early
+                      : STRAFE_SYMBOLS.late}
                   </span>
                   <span>{lastStrafe().type}</span>
                 </div>
@@ -325,7 +334,7 @@ export default function OverlayApp() {
             </div>
           ) : (
             <div className="text-xs text-slate-500 italic text-center w-full py-1">
-              En attente d'un counter-strafe...
+              {t("overlayApp.waitingStrafe")}
             </div>
           )}
         </div>
@@ -335,7 +344,7 @@ export default function OverlayApp() {
           {/* Shot Speed if fired */}
           {lastEvaluation() ? (
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Vitesse :</span>
+              <span className="text-slate-400">{t("overlayApp.speed")}</span>
               <span
                 className={`font-mono font-bold px-1.5 py-0.5 rounded ${
                   lastEvaluation().isAccurate
@@ -351,7 +360,7 @@ export default function OverlayApp() {
             </div>
           ) : (
             <div className="text-slate-500 flex items-center gap-1 font-mono">
-              <span>{isLocked() ? "🔒 Pass-through (Ctrl+F11)" : "🔓 Déplacement"}</span>
+              <span>{isLocked() ? t("overlayApp.modeGame") : t("overlayApp.modeMove")}</span>
             </div>
           )}
 
@@ -365,7 +374,9 @@ export default function OverlayApp() {
                 </span>
               </span>
             ) : (
-              <span className="text-slate-500 text-[10px]">Tirs : 0</span>
+              <span className="text-slate-500 text-[10px]">
+                {t("overlayApp.shotsCount", { count: 0 })}
+              </span>
             )}
           </div>
         </div>

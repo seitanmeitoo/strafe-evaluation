@@ -1,9 +1,12 @@
-import { For } from "solid-js";
+import { For, createMemo } from "solid-js";
 import { draw_time } from "../utils/stats";
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
+import { getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
+import { t } from "../i18n";
 
 export default function StrafeHistoryBar(props) {
   const strafes = () => props.strafes || props.totalStrafes || [];
+  const colors = createMemo(() => getStrafeColors(props.colorblindMode));
 
   return (
     <div className="flex flex-row p-2 bg-slate-900/60 dark:bg-slate-900/90 h-24 overflow-x-auto overflow-y-hidden w-full items-center border-t border-slate-700/40">
@@ -14,15 +17,28 @@ export default function StrafeHistoryBar(props) {
           const shotMs = hasShot ? Math.round(strafe.shot_delay / 1000) : null;
           const isRightToLeft = strafe.direction === "RightToLeft";
 
-          const typeColor =
+          const currentColors = colors();
+          const color =
             strafe.type === "Perfect"
-              ? "text-emerald-400 border-emerald-500/40"
+              ? currentColors.perfect
               : strafe.type === "Early"
-              ? "text-sky-400 border-sky-500/40"
-              : "text-amber-400 border-amber-500/40";
+              ? currentColors.early
+              : currentColors.late;
+
+          const symbol =
+            strafe.type === "Perfect"
+              ? STRAFE_SYMBOLS.perfect
+              : strafe.type === "Early"
+              ? STRAFE_SYMBOLS.early
+              : STRAFE_SYMBOLS.late;
 
           return (
-            <div className={`flex shadow-md select-none flex-col border bg-slate-800/90 rounded-lg justify-between items-center min-w-24 max-w-28 p-1.5 mr-2 h-20 text-xs shrink-0 ${typeColor}`}>
+            <div
+              className="flex shadow-md select-none flex-col border bg-slate-800/90 rounded-lg justify-between items-center min-w-24 max-w-28 p-1.5 mr-2 h-20 text-xs shrink-0"
+              style={{
+                "border-color": `${color}66`,
+              }}
+            >
               {/* Header: Direction + Diagonal indicator */}
               <div className="flex justify-between items-center w-full px-0.5 text-[10px] text-slate-300 font-semibold">
                 <span className="font-bold">
@@ -35,9 +51,12 @@ export default function StrafeHistoryBar(props) {
                 )}
               </div>
 
-              {/* Main timing info */}
+              {/* Main timing info with distinctive shape symbol */}
               <div className="text-center my-0.5">
-                <p className="font-bold text-xs">{strafe.type}</p>
+                <p className="font-bold text-xs flex items-center justify-center gap-1" style={{ color }}>
+                  <span>{symbol}</span>
+                  <span>{strafe.type}</span>
+                </p>
                 <p className="text-slate-300 font-mono text-[11px]">
                   {draw_time(strafe.duration)}
                 </p>
@@ -52,13 +71,13 @@ export default function StrafeHistoryBar(props) {
                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                         : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                     }`}
-                    title={`Délai: ${shotMs}ms | Vitesse résiduelle: ${evalResult.residualSpeed} u/s`}
+                    title={`${t("history.delay")}: ${shotMs}ms | ${t("history.residualSpeed")}: ${evalResult.residualSpeed} u/s`}
                   >
                     🎯 {shotMs}ms ({evalResult.residualSpeed}u/s)
                   </div>
                 ) : (
                   <span className="text-[10px] text-slate-500 italic">
-                    sans tir
+                    {t("history.withoutShot")}
                   </span>
                 )}
               </div>

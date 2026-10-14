@@ -13,6 +13,7 @@ import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
 import { playStrafeSound } from "./utils/audio";
 import { exportStrafesToCsv } from "./utils/exportCsv";
 import { saveSessionSnapshot } from "./utils/sessions";
+import { t, language, setLanguage } from "./i18n";
 import "./App.css";
 
 export default function App() {
@@ -28,7 +29,6 @@ export default function App() {
   function resetStrafes() {
     const list = totalStrafes();
     if (list.length >= 3) {
-      // Auto-archive current session before resetting
       saveSessionSnapshot(list);
     }
     setTotalStrafes([]);
@@ -38,12 +38,12 @@ export default function App() {
   function handleSaveCurrentSession() {
     const list = totalStrafes();
     if (list.length === 0) {
-      alert("Aucun strafe à enregistrer pour le moment.");
+      alert(t("dashboard.noStrafeToSave"));
       return;
     }
     const saved = saveSessionSnapshot(list);
     if (saved) {
-      alert(`Session de ${saved.totalStrafes} strafes sauvegardée avec succès !`);
+      alert(t("dashboard.sessionSaved", { count: saved.totalStrafes }));
     }
   }
 
@@ -83,6 +83,9 @@ export default function App() {
   async function handleSaveSettings(newSettings) {
     setSettings(newSettings);
     saveSettings(newSettings);
+    if (newSettings.language) {
+      setLanguage(newSettings.language);
+    }
     try {
       await invoke("set_monitored_keys", { keys: newSettings.keys });
       await invoke("set_thresholds", {
@@ -97,6 +100,14 @@ export default function App() {
   function toggleTheme() {
     const nextTheme = settings().theme === "light" ? "dark" : "light";
     const updated = { ...settings(), theme: nextTheme };
+    setSettings(updated);
+    saveSettings(updated);
+  }
+
+  function toggleLanguage() {
+    const nextLang = language() === "fr" ? "en" : "fr";
+    setLanguage(nextLang);
+    const updated = { ...settings(), language: nextLang };
     setSettings(updated);
     saveSettings(updated);
   }
@@ -138,6 +149,10 @@ export default function App() {
         localStorage.getItem("strafe_evaluation_settings")
       );
       let current = settings();
+
+      if (current.language) {
+        setLanguage(current.language);
+      }
 
       try {
         const backendSettings = await invoke("get_settings");
@@ -231,7 +246,7 @@ export default function App() {
             : "bg-white/80 border-slate-200"
         }`}
       >
-        {/* Left header actions: Sessions history & Theme toggle */}
+        {/* Left header actions: Sessions history, Theme toggle & Language switcher */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -241,10 +256,10 @@ export default function App() {
                 : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
             }`}
             onClick={() => setIsSessionsOpen(true)}
-            title="Historique des sessions d'entraînement"
+            title={t("sessions.title")}
           >
             <span>📈</span>
-            <span>Sessions</span>
+            <span>{t("header.sessions")}</span>
           </button>
 
           <button
@@ -255,21 +270,35 @@ export default function App() {
                 : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
             }`}
             onClick={toggleTheme}
-            title={isDark() ? "Passer en mode Clair" : "Passer en mode Sombre"}
+            title={isDark() ? t("header.themeLight") : t("header.themeDark")}
           >
             {isDark() ? "🌙" : "☀️"}
+          </button>
+
+          {/* Quick Language switcher */}
+          <button
+            type="button"
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+              isDark()
+                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
+            }`}
+            onClick={toggleLanguage}
+            title={language() === "fr" ? "Switch to English" : "Passer en Français"}
+          >
+            {language() === "fr" ? "🇫🇷 FR" : "🇬🇧 EN"}
           </button>
         </div>
 
         {/* Center: Title */}
         <div className="flex justify-center items-center select-none pointer-events-none">
           <h1 className="mr-3 drop-shadow-lg text-2xl font-bold text-center text-slate-200 text-stroke italic">
-            PatrikZero's
+            {t("app.title")}
           </h1>
           <h1 className="text-2xl font-bold text-center tracking-wide">
-            Strafe Evaluation{" "}
+            {t("app.subtitle")}{" "}
             <span className="text-xs font-semibold px-2 py-0.5 rounded bg-sky-500 text-white ml-2">
-              CS2 Engine v1.4
+              {t("app.engineVersion")}
             </span>
           </h1>
         </div>
@@ -289,12 +318,12 @@ export default function App() {
             onClick={toggleOverlay}
             title={
               isOverlayOpen()
-                ? "Masquer l'Overlay In-Game (Raccourci global : Alt + O)"
-                : "Activer l'Overlay In-Game transparent Always-on-Top (Raccourci global : Alt + O)"
+                ? t("header.overlayHide")
+                : t("header.overlayShow")
             }
           >
             <span>🪟</span>
-            <span>Overlay</span>
+            <span>{t("header.overlay")}</span>
             <span
               className={`w-2 h-2 rounded-full transition-colors ${
                 isOverlayOpen() ? "bg-emerald-300 animate-pulse" : "bg-slate-500"
@@ -316,13 +345,13 @@ export default function App() {
               onClick={toggleOverlayLock}
               title={
                 isOverlayLocked()
-                  ? "Mode Jeu (Click-Through actif). Les clics traversent l'overlay vers CS2. (Raccourci : Ctrl + F11)"
-                  : "Mode Réglage (Déplacement possible). Cliquez pour verrouiller les clics. (Raccourci : Ctrl + F11)"
+                  ? t("header.lockModeGame")
+                  : t("header.lockModeEdit")
               }
             >
               <span>{isOverlayLocked() ? "🔒" : "🔓"}</span>
               <span className="hidden sm:inline">
-                {isOverlayLocked() ? "Pass-through" : "Déplacement"}
+                {isOverlayLocked() ? t("header.passThrough") : t("header.draggable")}
               </span>
             </button>
           )}
@@ -335,7 +364,7 @@ export default function App() {
                 : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
             }`}
             onClick={() => setIsSettingsOpen(true)}
-            title="Paramètres & Tolérances (Touches, Marge Perfect, Audio, Overlay)"
+            title={t("header.settings")}
           >
             ⚙️
           </button>
@@ -353,7 +382,9 @@ export default function App() {
           }`}
         >
           <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-            <h2 className="select-none text-lg font-bold tracking-tight">Statistiques</h2>
+            <h2 className="select-none text-lg font-bold tracking-tight">
+              {t("dashboard.statsTitle")}
+            </h2>
 
             {/* Direction filter segmented control */}
             <div
@@ -370,7 +401,7 @@ export default function App() {
                 }`}
                 onClick={() => setDirectionFilter("all")}
               >
-                Tous
+                {t("dashboard.filterAll")}
               </button>
               <button
                 type="button"
@@ -381,7 +412,7 @@ export default function App() {
                 }`}
                 onClick={() => setDirectionFilter("LeftToRight")}
               >
-                A ➔ D
+                {t("dashboard.filterAtoD")}
               </button>
               <button
                 type="button"
@@ -392,7 +423,7 @@ export default function App() {
                 }`}
                 onClick={() => setDirectionFilter("RightToLeft")}
               >
-                D ➔ A
+                {t("dashboard.filterDtoA")}
               </button>
             </div>
 
@@ -408,9 +439,9 @@ export default function App() {
                     : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
                 }`}
                 onClick={toggleRequireShot}
-                title="Si activé, filtre pour n'enregistrer que les strafes accompagnés d'un tir mouse1"
+                title={t("dashboard.shotsOnlyTooltip")}
               >
-                {requireShotOnly() ? "🎯 Tirs seuls" : "🎯 Tous"}
+                {requireShotOnly() ? t("dashboard.shotsOnly") : t("dashboard.shotsAll")}
               </button>
 
               <button
@@ -421,9 +452,9 @@ export default function App() {
                     : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
                 }`}
                 onClick={handleExportCsv}
-                title="Exporter les données actuelles au format CSV"
+                title={t("dashboard.csvTooltip")}
               >
-                📥 CSV
+                {t("dashboard.csvExport")}
               </button>
 
               <button
@@ -434,18 +465,18 @@ export default function App() {
                     : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
                 }`}
                 onClick={handleSaveCurrentSession}
-                title="Sauvegarder la session actuelle dans l'historique"
+                title={t("dashboard.saveSessionTooltip")}
               >
-                💾
+                {t("dashboard.saveSession")}
               </button>
 
               <button
                 className="text-white text-xs font-semibold select-none shadow-md px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 cursor-pointer transition-all"
                 type="button"
                 onClick={resetStrafes}
-                title="Réinitialiser et archiver la session"
+                title={t("dashboard.resetTooltip")}
               >
-                Reset
+                {t("dashboard.reset")}
               </button>
             </div>
           </div>
@@ -458,6 +489,7 @@ export default function App() {
             earlyStrafes={earlyStrafes()}
             lateStrafes={lateStrafes()}
             perfectStrafes={perfectStrafes()}
+            colorblindMode={settings().colorblindMode}
           />
         </div>
 
@@ -476,6 +508,7 @@ export default function App() {
             strafes={filteredStrafes()}
             visualGoals={settings().visualGoals}
             theme={settings().theme}
+            colorblindMode={settings().colorblindMode}
           />
         </div>
       </div>
@@ -486,7 +519,10 @@ export default function App() {
       </div>
 
       {/* Bottom history bar */}
-      <StrafeHistoryBar strafes={filteredStrafes()} />
+      <StrafeHistoryBar
+        strafes={filteredStrafes()}
+        colorblindMode={settings().colorblindMode}
+      />
 
       {/* Settings Modal */}
       <SettingsModal

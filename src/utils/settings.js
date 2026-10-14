@@ -22,10 +22,64 @@ export const PRESETS = {
   },
 };
 
-export const STRAFE_COLORS = {
-  early: "#38bdf8", // Cyan / Electric blue
-  late: "#fb923c",  // Orange / Amber
-  perfect: "#34d399", // Emerald green
+export const COLORBLIND_PALETTES = {
+  default: {
+    id: "default",
+    name: "Standard",
+    early: "#38bdf8",   // Cyan / Sky
+    late: "#fb923c",    // Orange / Amber
+    perfect: "#34d399", // Emerald
+  },
+  deuteranopia: {
+    id: "deuteranopia",
+    name: "Deutéranopie",
+    early: "#2563eb",   // Cobalt Blue
+    late: "#f59e0b",    // Amber Gold
+    perfect: "#c084fc", // Bright Purple / Violet
+  },
+  protanopia: {
+    id: "protanopia",
+    name: "Protanopie",
+    early: "#1d4ed8",   // Deep Blue
+    late: "#eab308",    // Bright Yellow
+    perfect: "#f43f5e", // Magenta / Rose
+  },
+  tritanopia: {
+    id: "tritanopia",
+    name: "Tritanopie",
+    early: "#06b6d4",   // Cyan / Teal
+    late: "#ef4444",    // Bright Red
+    perfect: "#10b981", // Emerald
+  },
+  highContrast: {
+    id: "highContrast",
+    name: "Contraste Élevé",
+    early: "#38bdf8",   // Sky
+    late: "#f97316",    // Bright Orange
+    perfect: "#ffffff", // Pure White
+  },
+};
+
+export const STRAFE_SYMBOLS = {
+  early: "◀",
+  late: "▶",
+  perfect: "★",
+};
+
+export function getStrafeColors(colorblindMode = "default") {
+  return COLORBLIND_PALETTES[colorblindMode] || COLORBLIND_PALETTES.default;
+}
+
+export const STRAFE_COLORS = COLORBLIND_PALETTES.default;
+
+export const RAPID_TRIGGER_PRESET = {
+  perfectThresholdMs: 1.0,
+  maxStrafeMs: 200,
+  visualGoals: {
+    enabled: true,
+    earlyTargetMs: 10,
+    lateTargetMs: 12,
+  },
 };
 
 export const DEFAULT_SETTINGS = {
@@ -43,6 +97,8 @@ export const DEFAULT_SETTINGS = {
     lateTargetMs: 20,
   },
   theme: "dark",
+  language: "fr",
+  colorblindMode: "default",
   audio: {
     enabled: true,
     volume: 0.5,
@@ -123,6 +179,10 @@ export function loadSettings() {
             : DEFAULT_SETTINGS.visualGoals.lateTargetMs,
       },
       theme: parsed.theme === "light" ? "light" : "dark",
+      language: parsed.language === "en" ? "en" : "fr",
+      colorblindMode: COLORBLIND_PALETTES[parsed.colorblindMode]
+        ? parsed.colorblindMode
+        : DEFAULT_SETTINGS.colorblindMode,
       audio: {
         enabled:
           typeof parsed.audio?.enabled === "boolean"

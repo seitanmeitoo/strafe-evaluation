@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+
 export default function Cs2MetricsCard(props) {
   const metrics = () =>
     props.metrics || {
@@ -14,7 +16,7 @@ export default function Cs2MetricsCard(props) {
     <div className="grid grid-cols-3 gap-2 my-2 p-2 bg-slate-900/50 rounded-xl border border-slate-700/50 shadow-sm text-center">
       <div className="flex flex-col items-center justify-center p-1">
         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-          Tirs Précis CS2
+          {t("metrics.accurateShotsTitle")}
         </span>
         <span
           className={`text-xl font-extrabold ${
@@ -31,24 +33,27 @@ export default function Cs2MetricsCard(props) {
         </span>
         <span className="text-[10px] text-slate-400">
           {hasShots()
-            ? `${metrics().accurateShots}/${metrics().totalShots} tirs`
-            : "Aucun tir"}
+            ? t("metrics.shotsCount", {
+                accurate: metrics().accurateShots,
+                total: metrics().totalShots,
+              })
+            : t("metrics.noShots")}
         </span>
       </div>
 
       <div className="flex flex-col items-center justify-center p-1 border-x border-slate-700/50">
         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-          Délai Tir
+          {t("metrics.shotDelayTitle")}
         </span>
         <span className="text-xl font-extrabold text-slate-100">
           {hasShots() ? `${metrics().avgShotDelay} ms` : "-- ms"}
         </span>
-        <span className="text-[10px] text-slate-400">Arrêt ➔ mouse1</span>
+        <span className="text-[10px] text-slate-400">{t("metrics.stopToMouse")}</span>
       </div>
 
       <div className="flex flex-col items-center justify-center p-1">
         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-          Vitesse Résiduelle
+          {t("metrics.residualSpeedTitle")}
         </span>
         <span
           className={`text-xl font-extrabold ${
@@ -61,7 +66,7 @@ export default function Cs2MetricsCard(props) {
         >
           {hasShots() ? `${metrics().avgResidualSpeed} u/s` : "-- u/s"}
         </span>
-        <span className="text-[10px] text-slate-400">&lt; 85 u/s = Précis</span>
+        <span className="text-[10px] text-slate-400">{t("metrics.accurateThresholdNotice")}</span>
       </div>
     </div>
   );

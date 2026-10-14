@@ -1,5 +1,6 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { loadSessions, deleteSession, clearAllSessions } from "../utils/sessions";
+import { t, language } from "../i18n";
 
 export default function SessionsModal(props) {
   const [sessions, setSessions] = createSignal([]);
@@ -16,7 +17,7 @@ export default function SessionsModal(props) {
   }
 
   function handleClearAll() {
-    if (confirm("Voulez-vous vraiment effacer tout l'historique des sessions ?")) {
+    if (confirm(t("sessions.clearConfirm"))) {
       clearAllSessions();
       setSessions([]);
     }
@@ -34,7 +35,8 @@ export default function SessionsModal(props) {
   function formatDate(iso) {
     try {
       const d = new Date(iso);
-      return d.toLocaleDateString("fr-FR", {
+      const locale = language() === "en" ? "en-US" : "fr-FR";
+      return d.toLocaleDateString(locale, {
         day: "numeric",
         month: "short",
         hour: "2-digit",
@@ -59,14 +61,14 @@ export default function SessionsModal(props) {
             <div className="flex items-center gap-2">
               <span className="text-xl">📈</span>
               <h2 className="text-lg font-bold text-slate-100 tracking-wide">
-                Historique des Sessions d'Entraînement
+                {t("sessions.title")}
               </h2>
             </div>
             <button
               type="button"
               className="text-slate-400 hover:text-white text-lg font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
               onClick={props.onClose}
-              title="Fermer"
+              title={t("sessions.close")}
             >
               ✕
             </button>
@@ -76,7 +78,7 @@ export default function SessionsModal(props) {
           <div className="grid grid-cols-3 gap-3 p-4 bg-slate-900/40 border-b border-slate-800 text-center">
             <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
               <span className="text-[11px] text-slate-400 uppercase tracking-wider block">
-                Sessions
+                {t("sessions.totalSessions")}
               </span>
               <span className="text-xl font-extrabold text-slate-100">
                 {sessions().length}
@@ -84,7 +86,7 @@ export default function SessionsModal(props) {
             </div>
             <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
               <span className="text-[11px] text-slate-400 uppercase tracking-wider block">
-                Strafes Cumulés
+                {t("sessions.totalStrafes")}
               </span>
               <span className="text-xl font-extrabold text-sky-400">
                 {totalCumulativeStrafes()}
@@ -92,7 +94,7 @@ export default function SessionsModal(props) {
             </div>
             <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
               <span className="text-[11px] text-slate-400 uppercase tracking-wider block">
-                Meilleur Taux CS2
+                {t("sessions.bestAccuracy")}
               </span>
               <span className="text-xl font-extrabold text-emerald-400">
                 {bestAccurateRate()}
@@ -106,10 +108,7 @@ export default function SessionsModal(props) {
               when={sessions().length > 0}
               fallback={
                 <div className="py-12 text-center text-slate-400">
-                  <p className="text-base font-medium">Aucune session enregistrée.</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Les sessions sont automatiquement sauvegardées lors d'un Reset ou via le bouton "Sauvegarder".
-                  </p>
+                  <p className="text-base font-medium">{t("sessions.emptyNotice")}</p>
                 </div>
               }
             >
@@ -151,13 +150,15 @@ export default function SessionsModal(props) {
                               : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
                           }`}
                         >
-                          🎯 {session.accurateRate}% précis ({session.avgShotDelayMs}ms)
+                          🎯 {session.accurateRate}% {t("metrics.accurate")} ({session.avgShotDelayMs}ms)
                         </div>
                       ) : (
-                        <span className="text-[11px] text-slate-500 italic">sans tirs</span>
+                        <span className="text-[11px] text-slate-500 italic">
+                          {t("history.withoutShot")}
+                        </span>
                       )}
                       <span className="text-[10px] text-slate-400 block mt-0.5">
-                        Médiane : {session.medianDurationMs}ms
+                        {t("sessions.median")} {session.medianDurationMs}ms
                       </span>
                     </div>
 
@@ -166,7 +167,7 @@ export default function SessionsModal(props) {
                       type="button"
                       className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer text-xs"
                       onClick={() => handleDelete(session.id)}
-                      title="Supprimer cette session"
+                      title={t("sessions.deleteSession")}
                     >
                       🗑️
                     </button>
@@ -184,7 +185,7 @@ export default function SessionsModal(props) {
               disabled={sessions().length === 0}
               onClick={handleClearAll}
             >
-              Vider l'historique
+              {t("sessions.clearHistory")}
             </button>
 
             <button
@@ -192,7 +193,7 @@ export default function SessionsModal(props) {
               className="text-xs font-bold text-white px-5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-all cursor-pointer"
               onClick={props.onClose}
             >
-              Fermer
+              {t("sessions.close")}
             </button>
           </div>
         </div>

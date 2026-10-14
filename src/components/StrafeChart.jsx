@@ -2,7 +2,8 @@ import { createSignal, createEffect, onMount } from "solid-js";
 import { Chart, registerables } from "chart.js";
 import { Bar, Line } from "solid-chartjs";
 import { getOccurance } from "../utils/stats";
-import { STRAFE_COLORS } from "../utils/settings";
+import { getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
+import { t } from "../i18n";
 
 const thresholdLinesPlugin = {
   id: "thresholdLines",
@@ -58,16 +59,16 @@ const thresholdLinesPlugin = {
     if (pluginOptions.earlyTarget != null && pluginOptions.earlyTarget > 0) {
       drawLine(
         pluginOptions.earlyTarget,
-        STRAFE_COLORS.early,
-        `Early ≤ ${pluginOptions.earlyTarget}ms`
+        pluginOptions.earlyColor || "#38bdf8",
+        `${STRAFE_SYMBOLS.early} Early ≤ ${pluginOptions.earlyTarget}ms`
       );
     }
 
     if (pluginOptions.lateTarget != null && pluginOptions.lateTarget > 0) {
       drawLine(
         pluginOptions.lateTarget,
-        STRAFE_COLORS.late,
-        `Late ≤ ${pluginOptions.lateTarget}ms`
+        pluginOptions.lateColor || "#fb923c",
+        `${STRAFE_SYMBOLS.late} Late ≤ ${pluginOptions.lateTarget}ms`
       );
     }
   },
@@ -76,27 +77,28 @@ const thresholdLinesPlugin = {
 export default function StrafeChart(props) {
   const [viewMode, setViewMode] = createSignal("distribution"); // "distribution" | "trend"
   const labels = Array.from({ length: 201 / 5 + 1 }, (_, i) => i * 5);
+  const colors = () => getStrafeColors(props.colorblindMode);
 
   const [distData, setDistData] = createSignal({
     labels,
     datasets: [
       {
-        label: "Early",
+        label: `${STRAFE_SYMBOLS.early} Early`,
         data: getOccurance([]),
         borderRadius: 4,
-        backgroundColor: STRAFE_COLORS.early,
+        backgroundColor: colors().early,
       },
       {
-        label: "Late",
+        label: `${STRAFE_SYMBOLS.late} Late`,
         data: [0],
         borderRadius: 4,
-        backgroundColor: STRAFE_COLORS.late,
+        backgroundColor: colors().late,
       },
       {
-        label: "Perfect",
+        label: `${STRAFE_SYMBOLS.perfect} Perfect`,
         data: [0],
         borderRadius: 4,
-        backgroundColor: STRAFE_COLORS.perfect,
+        backgroundColor: colors().perfect,
       },
     ],
   });
@@ -115,27 +117,28 @@ export default function StrafeChart(props) {
     const early = props.earlyStrafes || [];
     const late = props.lateStrafes || [];
     const perfect = props.perfectStrafes || [];
+    const currentColors = colors();
 
     setDistData({
       labels,
       datasets: [
         {
-          label: "Early",
+          label: `${STRAFE_SYMBOLS.early} ${t("table.early")}`,
           data: getOccurance(early),
           borderRadius: 4,
-          backgroundColor: STRAFE_COLORS.early,
+          backgroundColor: currentColors.early,
         },
         {
-          label: "Late",
+          label: `${STRAFE_SYMBOLS.late} ${t("table.late")}`,
           data: getOccurance(late),
           borderRadius: 4,
-          backgroundColor: STRAFE_COLORS.late,
+          backgroundColor: currentColors.late,
         },
         {
-          label: "Perfect (0ms)",
+          label: `${STRAFE_SYMBOLS.perfect} ${t("table.perfect")} (0ms)`,
           data: [perfect.length],
           borderRadius: 4,
-          backgroundColor: STRAFE_COLORS.perfect,
+          backgroundColor: currentColors.perfect,
           borderWidth: 1,
           borderColor: "#ffffff",
         },
@@ -147,13 +150,14 @@ export default function StrafeChart(props) {
   createEffect(() => {
     const allStrafes = props.strafes || [];
     const recent = [...allStrafes].slice(0, 20).reverse(); // oldest to newest among last 20
+    const currentColors = colors();
 
     const trendLabels = recent.map((_, i) => `#${i + 1}`);
     const durationsMs = recent.map((s) => Math.round(s.duration / 1000));
     const pointColors = recent.map((s) => {
-      if (s.type === "Perfect") return STRAFE_COLORS.perfect;
-      if (s.type === "Early") return STRAFE_COLORS.early;
-      return STRAFE_COLORS.late;
+      if (s.type === "Perfect") return currentColors.perfect;
+      if (s.type === "Early") return currentColors.early;
+      return currentColors.late;
     });
 
     // Compute simple moving average (window of 5)
@@ -169,9 +173,9 @@ export default function StrafeChart(props) {
       datasets: [
         {
           type: "line",
-          label: "Moyenne Glissante",
+          label: t("chart.rollingAvgLabel"),
           data: movingAvg,
-          borderColor: "#38bdf8",
+          borderColor: currentColors.early,
           borderWidth: 2,
           pointRadius: 0,
           tension: 0.35,
@@ -179,7 +183,7 @@ export default function StrafeChart(props) {
         },
         {
           type: "bar",
-          label: "Durée Strafe (ms)",
+          label: t("chart.singleDurationLabel"),
           data: durationsMs,
           backgroundColor: pointColors,
           borderRadius: 4,
@@ -213,7 +217,9 @@ export default function StrafeChart(props) {
       thresholdLines: {
         enabled: Boolean(props.visualGoals?.enabled),
         earlyTarget: props.visualGoals?.earlyTargetMs ?? 15,
+        earlyColor: colors().early,
         lateTarget: props.visualGoals?.lateTargetMs ?? 20,
+        lateColor: colors().late,
       },
     },
   });
@@ -227,13 +233,9 @@ export default function StrafeChart(props) {
         ticks: { color: isDark() ? "#94a3b8" : "#475569" },
       },
       y: {
+        beginAtZero: true,
         grid: { color: isDark() ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
         ticks: { color: isDark() ? "#94a3b8" : "#475569" },
-        title: {
-          display: true,
-          text: "Durée (ms)",
-          color: isDark() ? "#94a3b8" : "#475569",
-        },
       },
     },
     plugins: {
@@ -249,8 +251,8 @@ export default function StrafeChart(props) {
       <div className="flex justify-between items-center mb-1 px-1">
         <span className="text-xs font-semibold text-slate-400">
           {viewMode() === "distribution"
-            ? "Histogramme des Fréquences"
-            : "Tendance & Moyenne Glissante (20 derniers)"}
+            ? t("chart.distributionTitle")
+            : t("chart.trendTitle")}
         </span>
         <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-lg text-[11px] font-semibold">
           <button
@@ -262,7 +264,7 @@ export default function StrafeChart(props) {
             }`}
             onClick={() => setViewMode("distribution")}
           >
-            📊 Histogramme
+            {t("chart.distributionTab")}
           </button>
           <button
             type="button"
@@ -273,7 +275,7 @@ export default function StrafeChart(props) {
             }`}
             onClick={() => setViewMode("trend")}
           >
-            📈 Moyenne Glissante
+            {t("chart.trendTab")}
           </button>
         </div>
       </div>
