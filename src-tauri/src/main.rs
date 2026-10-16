@@ -25,7 +25,7 @@ fn set_require_shot(require_shot: bool, state: tauri::State<Arc<GameState>>) {
 
 #[tauri::command]
 fn set_monitored_keys(keys: MonitoredKeys, state: tauri::State<Arc<GameState>>) -> Result<(), String> {
-    let active = ActiveKeyBindings::from_monitored_keys(keys);
+    let active = ActiveKeyBindings::from_monitored_keys(keys)?;
     if let Ok(mut lock) = state.key_bindings.write() {
         *lock = active;
         Ok(())
@@ -36,8 +36,18 @@ fn set_monitored_keys(keys: MonitoredKeys, state: tauri::State<Arc<GameState>>) 
 
 #[tauri::command]
 fn set_thresholds(perfect_threshold_ms: f64, max_strafe_ms: f64, state: tauri::State<Arc<GameState>>) {
-    let perfect_micros = (perfect_threshold_ms.max(0.0) * 1000.0).round() as u64;
-    let max_strafe_micros = (max_strafe_ms.max(10.0) * 1000.0).round() as u64;
+    let perfect_ms = if perfect_threshold_ms.is_nan() {
+        1.6
+    } else {
+        perfect_threshold_ms.clamp(0.0, 10.0)
+    };
+    let max_ms = if max_strafe_ms.is_nan() {
+        250.0
+    } else {
+        max_strafe_ms.clamp(50.0, 500.0)
+    };
+    let perfect_micros = (perfect_ms * 1000.0).round() as u64;
+    let max_strafe_micros = (max_ms * 1000.0).round() as u64;
     state.perfect_threshold_micros.store(perfect_micros, Ordering::Relaxed);
     state.max_eval_micros.store(max_strafe_micros, Ordering::Relaxed);
 }
