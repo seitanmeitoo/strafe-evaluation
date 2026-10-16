@@ -1,4 +1,4 @@
-import { createSignal, createMemo, onMount, onCleanup } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
 import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import StatsTable from "./components/StatsTable";
@@ -8,6 +8,7 @@ import StrafeHistoryBar from "./components/StrafeHistoryBar";
 import Cs2MetricsCard from "./components/Cs2MetricsCard";
 import SettingsModal from "./components/SettingsModal";
 import SessionsModal from "./components/SessionsModal";
+import { LockIcon } from "./components/Icons";
 import { getCs2Metrics } from "./utils/cs2Physics";
 import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
 import { playStrafeSound } from "./utils/audio";
@@ -126,6 +127,11 @@ export default function App() {
   }
 
   const isDark = () => settings().theme !== "light";
+
+  // Apply the theme on <html> so the color tokens also reach body and modals.
+  createEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark());
+  });
 
   const filteredStrafes = createMemo(() => {
     const list = totalStrafes();
@@ -257,261 +263,93 @@ export default function App() {
     });
   });
 
+  const btn =
+    "h-8 px-3 rounded-md border border-line bg-card text-ink text-[13px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
+
+  const filterBtn = (active) =>
+    `cursor-pointer select-none transition-colors ${
+      active ? "text-ink font-semibold underline underline-offset-4" : "text-muted hover:text-ink"
+    }`;
+
   return (
-    <div
-      className={`w-screen h-screen flex flex-col justify-between overflow-hidden transition-colors duration-200 ${
-        isDark() ? "bg-[#0f172a] text-slate-100 dark" : "bg-slate-100 text-slate-800"
-      }`}
-    >
+    <div className="w-screen h-screen min-w-[800px] min-h-[620px] flex flex-col overflow-hidden bg-surface text-ink">
       {/* Header */}
-      <div
-        className={`flex justify-between items-center px-6 py-2 border-b ${
-          isDark()
-            ? "bg-[#0f172a] border-slate-800"
-            : "bg-white/80 border-slate-200"
-        }`}
-      >
-        {/* Left header actions: Sessions history & Theme toggle */}
-        <div className="flex items-center gap-2">
+      <header className="h-[52px] shrink-0 flex items-center gap-2 px-5">
+        <h1 className="text-[21px] font-extrabold tracking-tight select-none mr-auto">
+          {t("app.title")}
+        </h1>
+
+        <button type="button" className={btn} onClick={() => setIsSessionsOpen(true)} title={t("sessions.title")}>
+          {t("header.sessions")}
+        </button>
+
+        <button
+          type="button"
+          className={`${btn} ${isOverlayOpen() ? "!bg-accent !border-accent !text-accent-ink" : ""}`}
+          onClick={toggleOverlay}
+          title={isOverlayOpen() ? t("header.overlayHide") : t("header.overlayShow")}
+          aria-pressed={isOverlayOpen()}
+        >
+          {t("header.overlay")}
+        </button>
+
+        {isOverlayOpen() && (
           <button
             type="button"
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
-              isDark()
-                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
-            }`}
-            onClick={() => setIsSessionsOpen(true)}
-            title={t("sessions.title")}
+            className={`${btn} flex items-center gap-1.5`}
+            onClick={toggleOverlayLock}
+            title={isOverlayLocked() ? t("header.lockModeGame") : t("header.lockModeEdit")}
           >
-            <span>📈</span>
-            <span>{t("header.sessions")}</span>
+            <LockIcon open={!isOverlayLocked()} />
+            <span>{isOverlayLocked() ? t("header.passThrough") : t("header.draggable")}</span>
           </button>
+        )}
 
-          <button
-            type="button"
-            className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition-all cursor-pointer border ${
-              isDark()
-                ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
-                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
-            }`}
-            onClick={toggleTheme}
-            title={isDark() ? t("header.themeLight") : t("header.themeDark")}
-          >
-            {isDark() ? "🌙" : "☀️"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className={btn}
+          onClick={toggleTheme}
+          title={isDark() ? t("header.themeLight") : t("header.themeDark")}
+        >
+          {isDark() ? t("settings.themeLight") : t("settings.themeDark")}
+        </button>
 
-        {/* Center: Title */}
-        <div className="flex justify-center items-center select-none pointer-events-none">
-          <h1 className="text-2xl font-bold text-center tracking-wide">
-            {t("app.title")}
-          </h1>
-        </div>
-
-        {/* Right header actions: Overlay HUD toggle, Lock toggle & Settings */}
-        <div className="flex items-center gap-2">
-          {/* Overlay In-Game Button */}
-          <button
-            type="button"
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
-              isOverlayOpen()
-                ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-emerald-950/20"
-                : isDark()
-                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
-            }`}
-            onClick={toggleOverlay}
-            title={
-              isOverlayOpen()
-                ? t("header.overlayHide")
-                : t("header.overlayShow")
-            }
-          >
-            <span>🪟</span>
-            <span>{t("header.overlay")}</span>
-            <span
-              className={`w-2 h-2 rounded-full transition-colors ${
-                isOverlayOpen() ? "bg-emerald-300 animate-pulse" : "bg-slate-500"
-              }`}
-            />
-          </button>
-
-          {/* Quick Click-Through lock toggle if overlay is open */}
-          {isOverlayOpen() && (
-            <button
-              type="button"
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm border ${
-                isOverlayLocked()
-                  ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500"
-                  : isDark()
-                  ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
-                  : "bg-white hover:bg-slate-50 text-amber-700 border-slate-300"
-              }`}
-              onClick={toggleOverlayLock}
-              title={
-                isOverlayLocked()
-                  ? t("header.lockModeGame")
-                  : t("header.lockModeEdit")
-              }
-            >
-              <span>{isOverlayLocked() ? "🔒" : "🔓"}</span>
-              <span className="hidden sm:inline">
-                {isOverlayLocked() ? t("header.passThrough") : t("header.draggable")}
-              </span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            className={`w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all cursor-pointer shadow-sm border ${
-              isDark()
-                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
-            }`}
-            onClick={() => setIsSettingsOpen(true)}
-            title={t("header.settings")}
-          >
-            ⚙️
-          </button>
-        </div>
-      </div>
+        <button type="button" className={btn} onClick={() => setIsSettingsOpen(true)} title={t("header.settings")}>
+          {t("header.settingsLabel")}
+        </button>
+      </header>
 
       {/* Main dashboard content */}
-      <div className="justify-between flex-grow flex px-4 gap-4 overflow-hidden py-2">
-        {/* Left column: Controls, CS2 Metrics & Detailed Stats */}
-        <div
-          className={`flex flex-col rounded-2xl p-4 w-[50%] shadow-xl overflow-y-auto border ${
-            isDark()
-              ? "bg-[#1e293b]/85 border-slate-700/60"
-              : "bg-white border-slate-200"
-          }`}
-        >
-          <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
-            <h2 className="select-none text-lg font-bold tracking-tight">
-              {t("dashboard.statsTitle")}
-            </h2>
-
-            {/* Direction filter segmented control */}
-            <div
-              className={`flex items-center gap-1 p-1 rounded-lg text-xs font-semibold select-none border ${
-                isDark() ? "bg-slate-900/60 border-slate-700/50" : "bg-slate-100 border-slate-200"
-              }`}
-            >
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  directionFilter() === "all"
-                    ? "bg-sky-500 text-white shadow-sm font-bold"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                onClick={() => setDirectionFilter("all")}
-              >
+      <main className="flex-1 min-h-0 flex gap-3 px-5">
+        {/* Left: statistics */}
+        <section className="w-[330px] shrink-0 bg-panel rounded-xl px-4 py-3 flex flex-col">
+          <div className="flex items-baseline justify-between mb-2">
+            <h2 className="text-base font-bold">{t("dashboard.statsTitle")}</h2>
+            <div className="flex gap-3 text-[12px]">
+              <button type="button" className={filterBtn(directionFilter() === "all")} onClick={() => setDirectionFilter("all")}>
                 {t("dashboard.filterAll")}
               </button>
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  directionFilter() === "LeftToRight"
-                    ? "bg-sky-500 text-white shadow-sm font-bold"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                onClick={() => setDirectionFilter("LeftToRight")}
-              >
+              <button type="button" className={filterBtn(directionFilter() === "LeftToRight")} onClick={() => setDirectionFilter("LeftToRight")}>
                 {t("dashboard.filterAtoD")}
               </button>
-              <button
-                type="button"
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  directionFilter() === "RightToLeft"
-                    ? "bg-sky-500 text-white shadow-sm font-bold"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-                onClick={() => setDirectionFilter("RightToLeft")}
-              >
+              <button type="button" className={filterBtn(directionFilter() === "RightToLeft")} onClick={() => setDirectionFilter("RightToLeft")}>
                 {t("dashboard.filterDtoA")}
-              </button>
-            </div>
-
-            {/* Actions: Require shot toggle, CSV Export, Session save & Reset */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
-                  requireShotOnly()
-                    ? "bg-sky-500 text-white border-sky-400 shadow-sm"
-                    : isDark()
-                    ? "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-                    : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
-                }`}
-                onClick={toggleRequireShot}
-                title={t("dashboard.shotsOnlyTooltip")}
-              >
-                {requireShotOnly() ? t("dashboard.shotsOnly") : t("dashboard.shotsAll")}
-              </button>
-
-              <button
-                type="button"
-                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
-                  isDark()
-                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
-                }`}
-                onClick={handleExportCsv}
-                title={t("dashboard.csvTooltip")}
-              >
-                {t("dashboard.csvExport")}
-              </button>
-
-              <button
-                type="button"
-                className={`text-xs px-2 py-1 rounded-lg border transition-all cursor-pointer select-none font-semibold ${
-                  isDark()
-                    ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
-                }`}
-                onClick={handleSaveCurrentSession}
-                title={t("dashboard.saveSessionTooltip")}
-              >
-                {t("dashboard.saveSession")}
-              </button>
-
-              <button
-                className="text-white text-xs font-semibold select-none shadow-md px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 cursor-pointer transition-all"
-                type="button"
-                onClick={resetStrafes}
-                title={t("dashboard.resetTooltip")}
-              >
-                {t("dashboard.reset")}
               </button>
             </div>
           </div>
 
-          {/* CS2 Tactical Precision Metrics */}
-          <Cs2MetricsCard metrics={cs2Metrics()} />
-
-          {/* Timing Stats Table */}
           <StatsTable
             earlyStrafes={earlyStrafes()}
             lateStrafes={lateStrafes()}
             perfectStrafes={perfectStrafes()}
             colorblindMode={settings().colorblindMode}
           />
-          <div
-            className="text-[10px] text-slate-400 text-center mt-1 cursor-help select-none"
-            title={t("dashboard.perfectInfoTitle")}
-          >
-            ℹ️ {t("dashboard.perfectInfoText")}
-          </div>
-        </div>
 
-        {/* Right column: Histogram Chart & Trend Mode */}
-        <div
-          className={`flex flex-col justify-center rounded-2xl w-[50%] p-3 shadow-xl border ${
-            isDark()
-              ? "bg-[#1e293b]/85 border-slate-700/60"
-              : "bg-white border-slate-200"
-          }`}
-        >
+          <Cs2MetricsCard metrics={cs2Metrics()} />
+        </section>
+
+        {/* Right: chart */}
+        <section className="flex-1 min-w-0 bg-card border border-line rounded-xl p-3 flex flex-col">
           <StrafeChart
             earlyStrafes={earlyStrafes()}
             lateStrafes={lateStrafes()}
@@ -522,19 +360,42 @@ export default function App() {
             colorblindMode={settings().colorblindMode}
             maxStrafeMs={settings().maxStrafeMs}
           />
+        </section>
+      </main>
+
+      {/* Keys and session actions */}
+      <div className="h-[104px] shrink-0 flex items-center gap-6 px-5">
+        <KeyVisualizer keys={settings().keys} />
+
+        <div className="ml-auto grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className={`${btn} ${requireShotOnly() ? "!border-accent !text-accent font-semibold" : ""}`}
+            onClick={toggleRequireShot}
+            title={t("dashboard.shotsOnlyTooltip")}
+            aria-pressed={requireShotOnly()}
+          >
+            {t("dashboard.shotsOnly")}
+          </button>
+          <button type="button" className={btn} onClick={handleExportCsv} title={t("dashboard.csvTooltip")}>
+            {t("dashboard.csvExport")}
+          </button>
+          <button
+            type="button"
+            className="h-8 px-3 rounded-md bg-accent text-accent-ink text-[13px] font-semibold hover:opacity-90 transition-opacity cursor-pointer select-none"
+            onClick={handleSaveCurrentSession}
+            title={t("dashboard.saveSessionTooltip")}
+          >
+            {t("dashboard.saveSession")}
+          </button>
+          <button type="button" className={btn} onClick={resetStrafes} title={t("dashboard.resetTooltip")}>
+            {t("dashboard.reset")}
+          </button>
         </div>
       </div>
 
-      {/* Center visualizer: Keys + Mouse1 */}
-      <div className="h-28 flex items-center justify-center my-0.5">
-        <KeyVisualizer keys={settings().keys} />
-      </div>
-
-      {/* Bottom history bar */}
-      <StrafeHistoryBar
-        strafes={filteredStrafes()}
-        colorblindMode={settings().colorblindMode}
-      />
+      {/* Bottom history strip */}
+      <StrafeHistoryBar strafes={filteredStrafes()} colorblindMode={settings().colorblindMode} />
 
       {/* Settings Modal */}
       <SettingsModal

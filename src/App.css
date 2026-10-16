@@ -45,6 +45,15 @@ body {
   color: rgb(var(--color-ink));
 }
 
+/* Scrollable without a visible scrollbar (history strip). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 body.overlay-mode,
 html.overlay-mode {
   background-color: transparent !important;
