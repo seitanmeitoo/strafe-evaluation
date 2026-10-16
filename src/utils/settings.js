@@ -26,9 +26,9 @@ export const COLORBLIND_PALETTES = {
   default: {
     id: "default",
     name: "Standard",
-    early: "#38bdf8",   // Cyan / Sky
-    late: "#fb923c",    // Orange / Amber
-    perfect: "#34d399", // Emerald
+    early: "#6f9bb8",   // Muted steel blue
+    late: "#c4935a",    // Muted ochre
+    perfect: "#6e8a5c", // Sage (brand accent)
   },
   deuteranopia: {
     id: "deuteranopia",
@@ -70,8 +70,6 @@ export function getStrafeColors(colorblindMode = "default") {
   return COLORBLIND_PALETTES[colorblindMode] || COLORBLIND_PALETTES.default;
 }
 
-export const STRAFE_COLORS = COLORBLIND_PALETTES.default;
-
 export const RAPID_TRIGGER_PRESET = {
   perfectThresholdMs: 1.0,
   maxStrafeMs: 200,
@@ -96,7 +94,7 @@ export const DEFAULT_SETTINGS = {
     earlyTargetMs: 15,
     lateTargetMs: 20,
   },
-  theme: "dark",
+  theme: "light",
   colorblindMode: "default",
   audio: {
     enabled: true,
@@ -241,7 +239,7 @@ export function loadSettings() {
           DEFAULT_SETTINGS.visualGoals.lateTargetMs
         ),
       },
-      theme: parsed.theme === "light" ? "light" : "dark",
+      theme: parsed.theme === "dark" ? "dark" : "light",
       colorblindMode: COLORBLIND_PALETTES[parsed.colorblindMode]
         ? parsed.colorblindMode
         : DEFAULT_SETTINGS.colorblindMode,

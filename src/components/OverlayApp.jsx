@@ -258,7 +258,7 @@ export default function OverlayApp() {
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold select-none transition-all ${
               perfectStreak() > 0
-                ? "bg-amber-500/25 text-amber-300 border border-amber-500/40 glow-streak"
+                ? "bg-amber-500/25 text-amber-300 border border-amber-500/40"
                 : "bg-slate-800/60 text-slate-500"
             }`}
             title={t("overlayApp.streakTooltip")}
