@@ -1,5 +1,6 @@
 import { getStats } from "./stats";
 import { getCs2Metrics } from "./cs2Physics";
+import { analyzeSession } from "./analysis";
 
 const SESSIONS_STORAGE_KEY = "strafe_evaluation_sessions";
 
@@ -40,6 +41,8 @@ export function saveSessionSnapshot(strafes) {
     accurateRate: metrics.accurateRate,
     avgShotDelayMs: metrics.avgShotDelay,
     avgResidualSpeed: metrics.avgResidualSpeed,
+    // Weak side, fatigue and consistency (sessions saved before this field have none).
+    analysis: analyzeSession(strafes),
   };
 
   try {

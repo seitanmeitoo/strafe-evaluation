@@ -56,6 +56,11 @@ export default {
     min: "Min",
     max: "Max",
     stdDeviation: "Std deviation",
+    consistency: "Variation",
+    consistencyHint: "Coefficient of variation: standard deviation divided by the average. Under 50 % your timing is steady, over 100 % it is irregular.",
+    consistency_steady: "Steady timing",
+    consistency_average: "Uneven timing",
+    consistency_irregular: "Irregular timing",
     samples: "Samples",
   },
   chart: {

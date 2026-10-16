@@ -2,6 +2,7 @@ import { createMemo, For } from "solid-js";
 import { getStats, draw_time } from "../utils/stats";
 import { getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
 import { t } from "../i18n";
+import { coefficientOfVariation, consistencyLabel } from "../utils/analysis";
 
 export default function StatsTable(props) {
   const early = createMemo(() => getStats(props.earlyStrafes || []));
@@ -15,6 +16,17 @@ export default function StatsTable(props) {
   );
   const perfectCount = createMemo(() => (props.perfectStrafes || []).length);
   const colors = createMemo(() => getStrafeColors(props.colorblindMode));
+
+  const allDurations = () => [
+    ...(props.earlyStrafes || []),
+    ...(props.lateStrafes || []),
+    ...(props.perfectStrafes || []),
+  ];
+  const cvAll = createMemo(() => coefficientOfVariation(allDurations()));
+  const cvEarly = createMemo(() => coefficientOfVariation(props.earlyStrafes || []));
+  const cvLate = createMemo(() => coefficientOfVariation(props.lateStrafes || []));
+  const formatCv = (cv) => (cv == null ? "–" : `${Math.round(cv * 100)} %`);
+  const cvTitle = (cv) => (cv == null ? "" : t(`table.consistency_${consistencyLabel(cv)}`));
 
   const rows = [
     { label: "table.median", key: "median" },
@@ -51,6 +63,14 @@ export default function StatsTable(props) {
             )}
           </For>
           <tr>
+            <th className="py-[3px] text-left font-normal text-muted cursor-help" title={t("table.consistencyHint")}>
+              {t("table.consistency")}
+            </th>
+            <td className="py-[3px]" title={cvTitle(cvAll())}>{formatCv(cvAll())}</td>
+            <td className="py-[3px]" title={cvTitle(cvEarly())}>{formatCv(cvEarly())}</td>
+            <td className="py-[3px]" title={cvTitle(cvLate())}>{formatCv(cvLate())}</td>
+          </tr>
+          <tr>
             <th className="py-[3px] text-left font-normal text-muted">{t("table.samples")}</th>
             <td className="py-[3px] font-semibold">{alls().samples}</td>
             <td className="py-[3px] font-semibold">{early().samples}</td>
@@ -59,13 +79,20 @@ export default function StatsTable(props) {
         </tbody>
       </table>
 
-      <p
-        className="mt-2 font-bold italic cursor-help w-fit"
-        style={{ color: colors().perfect }}
-        title={t("dashboard.perfectInfoTitle")}
-      >
-        {STRAFE_SYMBOLS.perfect} {t("dashboard.perfectCount", { count: perfectCount() })}
-      </p>
+      <div className="mt-2 flex items-baseline justify-between">
+        <p
+          className="font-bold italic cursor-help"
+          style={{ color: colors().perfect }}
+          title={t("dashboard.perfectInfoTitle")}
+        >
+          {STRAFE_SYMBOLS.perfect} {t("dashboard.perfectCount", { count: perfectCount() })}
+        </p>
+        {cvAll() != null && (
+          <p className="text-[12px] text-muted cursor-help" title={t("table.consistencyHint")}>
+            {t(`table.consistency_${consistencyLabel(cvAll())}`)}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
