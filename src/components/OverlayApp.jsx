@@ -1,10 +1,10 @@
 import { createSignal, createMemo, onMount, onCleanup } from "solid-js";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { appWindow, PhysicalPosition, availableMonitors } from "@tauri-apps/api/window";
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
 import { playStrafeSound } from "../utils/audio";
-import { loadSettings, getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
+import { loadSettings, saveSettings, getStrafeColors, STRAFE_SYMBOLS, formatKeyDisplay } from "../utils/settings";
 import { t, setLanguage } from "../i18n";
 import "../App.css";
 
@@ -16,10 +16,13 @@ export default function OverlayApp() {
   const [totalShots, setTotalShots] = createSignal(0);
   const [accurateShots, setAccurateShots] = createSignal(0);
   const [isLocked, setIsLocked] = createSignal(false);
-  const [opacity, setOpacity] = createSignal(0.9);
+  const [isVisible, setIsVisible] = createSignal(true);
   const [settings, setSettings] = createSignal(loadSettings());
 
+  const opacity = () => settings().overlay?.opacity ?? 0.85;
   const colors = createMemo(() => getStrafeColors(settings().colorblindMode));
+  const leftKey = () => formatKeyDisplay(settings().keys?.left || "A");
+  const rightKey = () => formatKeyDisplay(settings().keys?.right || "D");
 
   const lastEvaluation = createMemo(() => {
     const s = lastStrafe();
@@ -47,12 +50,16 @@ export default function OverlayApp() {
     const current = opacity();
     const nextIdx = (OPACITY_STEPS.findIndex((s) => Math.abs(s - current) < 0.05) + 1) % OPACITY_STEPS.length;
     const next = OPACITY_STEPS[nextIdx];
-    setOpacity(next);
-    try {
-      localStorage.setItem("strafe_overlay_opacity", String(next));
-    } catch (e) {
-      // Ignore storage errors
-    }
+    const updated = {
+      ...settings(),
+      overlay: {
+        ...settings().overlay,
+        opacity: next,
+      },
+    };
+    setSettings(updated);
+    saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
   }
 
   async function handleClose() {
@@ -80,29 +87,38 @@ export default function OverlayApp() {
       setLanguage(currentSettings.language);
     }
 
-    // Load saved opacity
-    try {
-      const savedOpacity = localStorage.getItem("strafe_overlay_opacity");
-      if (savedOpacity) {
-        const parsed = parseFloat(savedOpacity);
-        if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 1.0) {
-          setOpacity(parsed);
-        }
-      }
-    } catch (e) {
-      // Ignore
-    }
-
-    // Restore saved window position
+    // Restore saved window position with off-screen boundary check
     const restorePosition = async () => {
       try {
         const savedPos = localStorage.getItem("strafe_overlay_position");
-        if (savedPos) {
-          const { x, y } = JSON.parse(savedPos);
-          if (typeof x === "number" && typeof y === "number") {
-            await appWindow.setPosition(new PhysicalPosition(x, y));
+        if (!savedPos) return;
+
+        const { x, y } = JSON.parse(savedPos);
+        if (typeof x !== "number" || typeof y !== "number") return;
+
+        const monitors = await availableMonitors();
+        if (monitors && monitors.length > 0) {
+          const isVisibleOnAny = monitors.some((m) => {
+            const monLeft = m.position.x;
+            const monRight = m.position.x + m.size.width;
+            const monTop = m.position.y;
+            const monBottom = m.position.y + m.size.height;
+
+            return (
+              x + 50 > monLeft &&
+              x < monRight &&
+              y + 30 > monTop &&
+              y < monBottom
+            );
+          });
+
+          if (!isVisibleOnAny) {
+            console.warn("Saved overlay position is off-screen, resetting:", { x, y });
+            return;
           }
         }
+
+        await appWindow.setPosition(new PhysicalPosition(x, y));
       } catch (e) {
         console.warn("Could not restore overlay position:", e);
       }
@@ -115,6 +131,7 @@ export default function OverlayApp() {
         const state = await invoke("get_overlay_state");
         if (state) {
           setIsLocked(Boolean(state.is_locked));
+          setIsVisible(Boolean(state.is_open));
         }
       } catch (e) {
         console.warn("Failed to get overlay state:", e);
@@ -124,8 +141,11 @@ export default function OverlayApp() {
 
     let unlistenStrafe;
     let unlistenLock;
+    let unlistenVis;
+    let unlistenSettings;
     let unlistenReset;
     let unlistenMove;
+    let moveTimeout = null;
 
     const setupListeners = async () => {
       unlistenStrafe = await listen("strafe", (event) => {
@@ -157,8 +177,8 @@ export default function OverlayApp() {
           }
         }
 
-        // Audio feedback
-        if (settings().audio?.enabled) {
+        // Audio feedback (only play if overlay is currently visible)
+        if (settings().audio?.enabled && isVisible()) {
           playStrafeSound(strafe.type, settings().audio?.volume ?? 0.5);
         }
       });
@@ -168,27 +188,47 @@ export default function OverlayApp() {
         setIsLocked(locked);
       });
 
+      unlistenVis = await listen("overlay-visibility-toggled", (event) => {
+        const visible = Boolean(event.payload?.visible);
+        setIsVisible(visible);
+      });
+
+      unlistenSettings = await listen("settings-changed", (event) => {
+        const newSettings = event.payload || loadSettings();
+        setSettings(newSettings);
+        if (newSettings.language) {
+          setLanguage(newSettings.language);
+        }
+      });
+
       unlistenReset = await listen("strafe-reset", () => {
         handleReset();
       });
 
+      // Debounced position saving (300ms)
       unlistenMove = await appWindow.onMoved(({ payload: position }) => {
-        try {
-          localStorage.setItem(
-            "strafe_overlay_position",
-            JSON.stringify({ x: position.x, y: position.y })
-          );
-        } catch (e) {
-          // Ignore
-        }
+        if (moveTimeout) clearTimeout(moveTimeout);
+        moveTimeout = setTimeout(() => {
+          try {
+            localStorage.setItem(
+              "strafe_overlay_position",
+              JSON.stringify({ x: position.x, y: position.y })
+            );
+          } catch (e) {
+            // Ignore
+          }
+        }, 300);
       });
     };
 
     setupListeners();
 
     onCleanup(() => {
+      if (moveTimeout) clearTimeout(moveTimeout);
       if (typeof unlistenStrafe === "function") unlistenStrafe();
       if (typeof unlistenLock === "function") unlistenLock();
+      if (typeof unlistenVis === "function") unlistenVis();
+      if (typeof unlistenSettings === "function") unlistenSettings();
       if (typeof unlistenReset === "function") unlistenReset();
       if (typeof unlistenMove === "function") unlistenMove();
       document.documentElement.classList.remove("overlay-mode");
@@ -323,7 +363,9 @@ export default function OverlayApp() {
               {/* Direction Indicator */}
               <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                 <span>
-                  {lastStrafe().direction === "LeftToRight" ? "A ➔ D" : "D ➔ A"}
+                  {lastStrafe().direction === "LeftToRight"
+                    ? `${leftKey()} ➔ ${rightKey()}`
+                    : `${rightKey()} ➔ ${leftKey()}`}
                 </span>
                 {lastStrafe().is_diagonal && (
                   <span className="text-[10px] px-1 rounded bg-slate-800 text-sky-400 font-mono">

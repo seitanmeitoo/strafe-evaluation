@@ -19,6 +19,7 @@ const thresholdLinesPlugin = {
 
     const drawLine = (targetMs, color, labelText) => {
       if (targetMs == null || isNaN(targetMs) || targetMs < 0) return;
+      if (pluginOptions.maxStrafeMs != null && targetMs > pluginOptions.maxStrafeMs) return;
 
       const binIndex = targetMs / 5;
       const baseIndex = Math.floor(binIndex);
@@ -76,15 +77,16 @@ const thresholdLinesPlugin = {
 
 export default function StrafeChart(props) {
   const [viewMode, setViewMode] = createSignal("distribution"); // "distribution" | "trend"
-  const labels = Array.from({ length: 201 / 5 + 1 }, (_, i) => i * 5);
+  const maxMs = () => Math.max(50, Math.min(500, props.maxStrafeMs || 250));
+  const labels = () => Array.from({ length: Math.floor(maxMs() / 5) + 1 }, (_, i) => i * 5);
   const colors = () => getStrafeColors(props.colorblindMode);
 
   const [distData, setDistData] = createSignal({
-    labels,
+    labels: labels(),
     datasets: [
       {
         label: `${STRAFE_SYMBOLS.early} Early`,
-        data: getOccurance([]),
+        data: getOccurance([], maxMs()),
         borderRadius: 4,
         backgroundColor: colors().early,
       },
@@ -118,19 +120,21 @@ export default function StrafeChart(props) {
     const late = props.lateStrafes || [];
     const perfect = props.perfectStrafes || [];
     const currentColors = colors();
+    const currentMaxMs = maxMs();
+    const currentLabels = labels();
 
     setDistData({
-      labels,
+      labels: currentLabels,
       datasets: [
         {
           label: `${STRAFE_SYMBOLS.early} ${t("table.early")}`,
-          data: getOccurance(early),
+          data: getOccurance(early, currentMaxMs),
           borderRadius: 4,
           backgroundColor: currentColors.early,
         },
         {
           label: `${STRAFE_SYMBOLS.late} ${t("table.late")}`,
-          data: getOccurance(late),
+          data: getOccurance(late, currentMaxMs),
           borderRadius: 4,
           backgroundColor: currentColors.late,
         },
@@ -214,12 +218,24 @@ export default function StrafeChart(props) {
       legend: {
         labels: { color: isDark() ? "#cbd5e1" : "#334155" },
       },
+      tooltip: {
+        callbacks: {
+          afterBody(context) {
+            const hasPerfect = context.some((item) => item.datasetIndex === 2);
+            if (hasPerfect) {
+              return "Note: Perfect = 0 ms";
+            }
+            return "";
+          },
+        },
+      },
       thresholdLines: {
         enabled: Boolean(props.visualGoals?.enabled),
         earlyTarget: props.visualGoals?.earlyTargetMs ?? 15,
         earlyColor: colors().early,
         lateTarget: props.visualGoals?.lateTargetMs ?? 20,
         lateColor: colors().late,
+        maxStrafeMs: maxMs(),
       },
     },
   });

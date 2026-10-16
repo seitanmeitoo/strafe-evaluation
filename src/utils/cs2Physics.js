@@ -1,8 +1,33 @@
+/**
+ * CS2 Counter-Strafe Physics Modeling Constants
+ *
+ * Sources and Background:
+ * - CS2_MAX_SPEED: 250 units/second is the standard base movement speed in CS2 / Source engine
+ *   when holding a knife, scout, or default pistol.
+ * - ACCURATE_SPEED_RATIO: 0.34 (34%). In CS2 firing mechanics, full standing accuracy is achieved
+ *   when player velocity drops below 34% of max speed (85 u/s for 250 u/s max speed).
+ * - START_SPEED_TAU_MS: 143 ms. Characteristic time constant for exponential acceleration from
+ *   standstill: v(t) = 1 - exp(-t / tau), reaching ~95% full speed after ~430 ms (3*tau).
+ * - FRICTION_TO_ACCURATE_MS: 230 ms. Passive deceleration duration under ground friction
+ *   (sv_friction 5.2, sv_stopspeed) to drop from 100% to the 34% accuracy threshold without opposite key.
+ * - ACTIVE_COUNTER_TO_ACCURATE_MS: 80 ms. Active counter-strafe braking duration to drop from 100%
+ *   to the 34% accuracy threshold when pressing the opposite key.
+ *
+ * Assumptions of this linear approximation model:
+ * - Flat ground surface with standard server cvars (sv_friction, sv_accelerate).
+ * - Horizontal single-axis strafe.
+ * - Linear approximation of deceleration rates during friction and active counter-strafe phases.
+ */
 export const ACCURATE_SPEED_RATIO = 0.34;
 export const START_SPEED_TAU_MS = 143;
 export const FRICTION_TO_ACCURATE_MS = 230;
 export const ACTIVE_COUNTER_TO_ACCURATE_MS = 80;
 export const CS2_MAX_SPEED = 250;
+
+/**
+ * Derived velocity threshold below which shooting is accurate in CS2 (85 u/s).
+ */
+export const ACCURATE_SPEED_THRESHOLD = CS2_MAX_SPEED * ACCURATE_SPEED_RATIO;
 
 const FRICTION_DECEL_RATE = (1.0 - ACCURATE_SPEED_RATIO) / FRICTION_TO_ACCURATE_MS;
 const ACTIVE_DECEL_RATE = (1.0 - ACCURATE_SPEED_RATIO) / ACTIVE_COUNTER_TO_ACCURATE_MS;
@@ -38,22 +63,15 @@ export function calculateSpeedAtShot(strafe) {
 
   switch (strafe.type) {
     case "Early":
-      if (shotDelayMs <= durationMs) {
-        v = Math.max(0, v0 - shotDelayMs * FRICTION_DECEL_RATE);
-      } else {
-        const vAtCounter = Math.max(0, v0 - durationMs * FRICTION_DECEL_RATE);
-        const activeTime = shotDelayMs - durationMs;
-        v = vAtCounter - activeTime * ACTIVE_DECEL_RATE;
-      }
-      break;
-
     case "Late":
+      // In both Early (deadzone) and Late (overlap) phases before clean counter-strafing takes effect,
+      // the initial duration decelerates via friction, followed by active counter-strafe braking.
       if (shotDelayMs <= durationMs) {
         v = Math.max(0, v0 - shotDelayMs * FRICTION_DECEL_RATE);
       } else {
-        const vAtRelease = Math.max(0, v0 - durationMs * FRICTION_DECEL_RATE);
+        const vAtTransition = Math.max(0, v0 - durationMs * FRICTION_DECEL_RATE);
         const activeTime = shotDelayMs - durationMs;
-        v = vAtRelease - activeTime * ACTIVE_DECEL_RATE;
+        v = vAtTransition - activeTime * ACTIVE_DECEL_RATE;
       }
       break;
 

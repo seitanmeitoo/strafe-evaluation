@@ -1,6 +1,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import { formatKeyDisplay } from "../utils/settings";
+import { t } from "../i18n";
 
 export default function KeyVisualizer(props) {
   const [aPressed, setAPressed] = createSignal(false);
@@ -72,21 +73,21 @@ export default function KeyVisualizer(props) {
           className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-sky-500 hover:bg-sky-400 text-white transition-all"
           onClick={simulateEarly}
         >
-          Early + Tir
+          {t("visualizer.simulateEarly")}
         </button>
         <button
           type="button"
           className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-amber-500 hover:bg-amber-400 text-white transition-all"
           onClick={simulateLate}
         >
-          Late + Tir
+          {t("visualizer.simulateLate")}
         </button>
         <button
           type="button"
           className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-emerald-500 hover:bg-emerald-400 text-white transition-all"
           onClick={simulatePerfect}
         >
-          Perfect + Tir
+          {t("visualizer.simulatePerfect")}
         </button>
       </div>
 

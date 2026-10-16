@@ -1,12 +1,47 @@
-import { For, createMemo } from "solid-js";
+import { For, createMemo, createSignal, onMount, onCleanup } from "solid-js";
+import { listen } from "@tauri-apps/api/event";
 import { draw_time } from "../utils/stats";
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
-import { getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
+import { getStrafeColors, STRAFE_SYMBOLS, loadSettings, formatKeyDisplay } from "../utils/settings";
 import { t } from "../i18n";
 
 export default function StrafeHistoryBar(props) {
-  const strafes = () => props.strafes || props.totalStrafes || [];
+  const strafes = createMemo(() => {
+    const list = props.strafes || props.totalStrafes || [];
+    return list.slice(0, 100);
+  });
   const colors = createMemo(() => getStrafeColors(props.colorblindMode));
+
+  const [currentKeys, setCurrentKeys] = createSignal(loadSettings().keys || { left: "A", right: "D" });
+
+  onMount(() => {
+    let unlisten;
+    listen("settings-changed", (e) => {
+      if (e.payload?.keys) {
+        setCurrentKeys(e.payload.keys);
+      }
+    }).then((fn) => { unlisten = fn; });
+
+    onCleanup(() => {
+      if (typeof unlisten === "function") unlisten();
+    });
+  });
+
+  const getColor = (type) => {
+    const c = colors();
+    if (type === "Perfect") return c.perfect;
+    if (type === "Early") return c.early;
+    return c.late;
+  };
+
+  const getSymbol = (type) => {
+    if (type === "Perfect") return STRAFE_SYMBOLS.perfect;
+    if (type === "Early") return STRAFE_SYMBOLS.early;
+    return STRAFE_SYMBOLS.late;
+  };
+
+  const leftKey = () => formatKeyDisplay(props.keys?.left || currentKeys().left || "A");
+  const rightKey = () => formatKeyDisplay(props.keys?.right || currentKeys().right || "D");
 
   return (
     <div className="flex flex-row p-2 bg-slate-900/60 dark:bg-slate-900/90 h-24 overflow-x-auto overflow-y-hidden w-full items-center border-t border-slate-700/40">
@@ -17,32 +52,17 @@ export default function StrafeHistoryBar(props) {
           const shotMs = hasShot ? Math.round(strafe.shot_delay / 1000) : null;
           const isRightToLeft = strafe.direction === "RightToLeft";
 
-          const currentColors = colors();
-          const color =
-            strafe.type === "Perfect"
-              ? currentColors.perfect
-              : strafe.type === "Early"
-              ? currentColors.early
-              : currentColors.late;
-
-          const symbol =
-            strafe.type === "Perfect"
-              ? STRAFE_SYMBOLS.perfect
-              : strafe.type === "Early"
-              ? STRAFE_SYMBOLS.early
-              : STRAFE_SYMBOLS.late;
-
           return (
             <div
               className="flex shadow-md select-none flex-col border bg-slate-800/90 rounded-lg justify-between items-center min-w-24 max-w-28 p-1.5 mr-2 h-20 text-xs shrink-0"
               style={{
-                "border-color": `${color}66`,
+                "border-color": `${getColor(strafe.type)}66`,
               }}
             >
               {/* Header: Direction + Diagonal indicator */}
               <div className="flex justify-between items-center w-full px-0.5 text-[10px] text-slate-300 font-semibold">
                 <span className="font-bold">
-                  {isRightToLeft ? "D ➔ A" : "A ➔ D"}
+                  {isRightToLeft ? `${rightKey()} ➔ ${leftKey()}` : `${leftKey()} ➔ ${rightKey()}`}
                 </span>
                 {strafe.is_diagonal && (
                   <span className="bg-sky-500/20 text-sky-300 px-1 rounded text-[9px] font-bold">
@@ -53,8 +73,11 @@ export default function StrafeHistoryBar(props) {
 
               {/* Main timing info with distinctive shape symbol */}
               <div className="text-center my-0.5">
-                <p className="font-bold text-xs flex items-center justify-center gap-1" style={{ color }}>
-                  <span>{symbol}</span>
+                <p
+                  className="font-bold text-xs flex items-center justify-center gap-1"
+                  style={{ color: getColor(strafe.type) }}
+                >
+                  <span>{getSymbol(strafe.type)}</span>
                   <span>{strafe.type}</span>
                 </p>
                 <p className="text-slate-300 font-mono text-[11px]">

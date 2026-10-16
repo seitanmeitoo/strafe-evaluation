@@ -4,6 +4,9 @@ import {
   DEFAULT_SETTINGS,
   COLORBLIND_PALETTES,
   RAPID_TRIGGER_PRESET,
+  SETTINGS_BOUNDS,
+  clampNumber,
+  normalizeKey,
   formatKeyDisplay,
   STRAFE_SYMBOLS,
 } from "../utils/settings";
@@ -45,12 +48,22 @@ export default function SettingsModal(props) {
     DEFAULT_SETTINGS.overlay.autoStart
   );
   const [activeRebind, setActiveRebind] = createSignal(null);
+  const [rebindError, setRebindError] = createSignal(null);
   const [rapidTriggerNotice, setRapidTriggerNotice] = createSignal(false);
+  let initialLanguage = "fr";
+
+  function handleCancel() {
+    setLanguage(initialLanguage);
+    setActiveRebind(null);
+    setRebindError(null);
+    props.onClose();
+  }
 
   // Sync state whenever modal is opened
   createEffect(() => {
     if (props.isOpen && props.currentSettings) {
       const s = props.currentSettings;
+      initialLanguage = s.language || "fr";
       setKeys({ ...s.keys });
       setPerfectThresholdMs(s.perfectThresholdMs);
       setMaxStrafeMs(s.maxStrafeMs);
@@ -69,6 +82,7 @@ export default function SettingsModal(props) {
       );
       setOverlayAutoStart(Boolean(s.overlay?.autoStart));
       setActiveRebind(null);
+      setRebindError(null);
       setRapidTriggerNotice(false);
     }
   });
@@ -84,18 +98,27 @@ export default function SettingsModal(props) {
 
       if (e.key === "Escape") {
         setActiveRebind(null);
+        setRebindError(null);
         return;
       }
 
-      let captured = e.key;
-      if (captured.startsWith("Arrow")) {
-        // Keep ArrowLeft, ArrowRight, etc.
-      } else if (captured === " ") {
-        captured = "Space";
-      } else if (captured.length === 1) {
-        captured = captured.toUpperCase();
+      const captured = normalizeKey(e.key);
+      if (!captured) {
+        setRebindError(t("settings.unsupportedKey"));
+        return;
       }
 
+      // Check if key is already assigned to another direction
+      const currentKeys = keys();
+      const duplicateDir = Object.entries(currentKeys).find(
+        ([dir, k]) => dir !== rebindingDirection && k.toUpperCase() === captured.toUpperCase()
+      );
+      if (duplicateDir) {
+        setRebindError(t("settings.duplicateKey", { key: captured }));
+        return;
+      }
+
+      setRebindError(null);
       setKeys((prev) => ({
         ...prev,
         [rebindingDirection]: captured,
@@ -113,6 +136,7 @@ export default function SettingsModal(props) {
     const preset = PRESETS[presetKey];
     if (preset) {
       setKeys({ ...preset.keys });
+      setRebindError(null);
     }
   }
 
@@ -123,6 +147,7 @@ export default function SettingsModal(props) {
     setEarlyTargetMs(RAPID_TRIGGER_PRESET.visualGoals.earlyTargetMs);
     setLateTargetMs(RAPID_TRIGGER_PRESET.visualGoals.lateTargetMs);
     setRapidTriggerNotice(true);
+    setRebindError(null);
     setTimeout(() => setRapidTriggerNotice(false), 4000);
   }
 
@@ -141,6 +166,7 @@ export default function SettingsModal(props) {
     setOverlayOpacity(DEFAULT_SETTINGS.overlay.opacity);
     setOverlayAutoStart(DEFAULT_SETTINGS.overlay.autoStart);
     setActiveRebind(null);
+    setRebindError(null);
   }
 
   function handleSave() {
@@ -149,22 +175,52 @@ export default function SettingsModal(props) {
 
     props.onSave({
       keys: keys(),
-      perfectThresholdMs: Math.max(0, Number(perfectThresholdMs()) || 0),
-      maxStrafeMs: Math.max(50, Number(maxStrafeMs()) || 250),
+      perfectThresholdMs: clampNumber(
+        perfectThresholdMs(),
+        SETTINGS_BOUNDS.perfectThresholdMs.min,
+        SETTINGS_BOUNDS.perfectThresholdMs.max,
+        DEFAULT_SETTINGS.perfectThresholdMs
+      ),
+      maxStrafeMs: clampNumber(
+        maxStrafeMs(),
+        SETTINGS_BOUNDS.maxStrafeMs.min,
+        SETTINGS_BOUNDS.maxStrafeMs.max,
+        DEFAULT_SETTINGS.maxStrafeMs
+      ),
       visualGoals: {
         enabled: goalsEnabled(),
-        earlyTargetMs: Math.max(1, Number(earlyTargetMs()) || 15),
-        lateTargetMs: Math.max(1, Number(lateTargetMs()) || 20),
+        earlyTargetMs: clampNumber(
+          earlyTargetMs(),
+          SETTINGS_BOUNDS.earlyTargetMs.min,
+          SETTINGS_BOUNDS.earlyTargetMs.max,
+          DEFAULT_SETTINGS.visualGoals.earlyTargetMs
+        ),
+        lateTargetMs: clampNumber(
+          lateTargetMs(),
+          SETTINGS_BOUNDS.lateTargetMs.min,
+          SETTINGS_BOUNDS.lateTargetMs.max,
+          DEFAULT_SETTINGS.visualGoals.lateTargetMs
+        ),
       },
       theme: theme(),
       language: newLang,
       colorblindMode: colorblindMode(),
       audio: {
         enabled: audioEnabled(),
-        volume: Math.min(1, Math.max(0, Number(audioVolume()) || 0)),
+        volume: clampNumber(
+          audioVolume(),
+          SETTINGS_BOUNDS.audioVolume.min,
+          SETTINGS_BOUNDS.audioVolume.max,
+          DEFAULT_SETTINGS.audio.volume
+        ),
       },
       overlay: {
-        opacity: Math.min(1, Math.max(0.3, Number(overlayOpacity()) || 0.85)),
+        opacity: clampNumber(
+          overlayOpacity(),
+          SETTINGS_BOUNDS.overlayOpacity.min,
+          SETTINGS_BOUNDS.overlayOpacity.max,
+          DEFAULT_SETTINGS.overlay.opacity
+        ),
         autoStart: overlayAutoStart(),
       },
     });
@@ -181,8 +237,7 @@ export default function SettingsModal(props) {
         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
-            setActiveRebind(null);
-            props.onClose();
+            handleCancel();
           }
         }}
       >
@@ -198,7 +253,7 @@ export default function SettingsModal(props) {
             <button
               type="button"
               className="text-slate-400 hover:text-white text-lg font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              onClick={props.onClose}
+              onClick={handleCancel}
               title={t("settings.close")}
             >
               ✕
@@ -295,7 +350,9 @@ export default function SettingsModal(props) {
                       }`}
                       onClick={() => setColorblindMode(pal.id)}
                     >
-                      <span className="text-xs font-semibold block">{pal.name}</span>
+                      <span className="text-xs font-semibold block">
+                        {t(`settings.colorblind${pal.id.charAt(0).toUpperCase() + pal.id.slice(1)}`)}
+                      </span>
                       <div className="flex items-center gap-1.5">
                         <span
                           className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
@@ -482,7 +539,7 @@ export default function SettingsModal(props) {
                   className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
                   onClick={() => applyPreset("arrows")}
                 >
-                  Flèches
+                  {t("settings.presetArrows") || "Flèches"}
                 </button>
                 <button
                   type="button"
@@ -567,6 +624,12 @@ export default function SettingsModal(props) {
                   </button>
                 </div>
               </div>
+
+              <Show when={rebindError()}>
+                <p className="text-xs text-rose-400 font-medium bg-rose-950/40 border border-rose-800/50 rounded-lg p-2 text-center mt-2">
+                  {rebindError()}
+                </p>
+              </Show>
             </div>
 
             {/* Section 2: Tolerances */}
@@ -599,7 +662,7 @@ export default function SettingsModal(props) {
                 <input
                   type="range"
                   min="0"
-                  max="8"
+                  max="10"
                   step="0.1"
                   className="w-full accent-emerald-500 cursor-pointer"
                   value={perfectThresholdMs()}
@@ -622,7 +685,7 @@ export default function SettingsModal(props) {
                     <input
                       type="number"
                       step="10"
-                      min="100"
+                      min="50"
                       max="500"
                       className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-right font-bold text-sky-400 focus:outline-none focus:border-sky-400"
                       value={maxStrafeMs()}
@@ -635,7 +698,7 @@ export default function SettingsModal(props) {
                 </div>
                 <input
                   type="range"
-                  min="100"
+                  min="50"
                   max="500"
                   step="10"
                   className="w-full accent-sky-500 cursor-pointer"
@@ -763,7 +826,7 @@ export default function SettingsModal(props) {
               <button
                 type="button"
                 className="text-xs font-medium text-slate-300 hover:text-white px-4 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer"
-                onClick={props.onClose}
+                onClick={handleCancel}
               >
                 {t("settings.cancelBtn")}
               </button>

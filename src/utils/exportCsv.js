@@ -1,20 +1,26 @@
 import { calculateSpeedAtShot } from "./cs2Physics";
+import { loadSettings, formatKeyDisplay } from "./settings";
+import { t } from "../i18n";
 
 export function exportStrafesToCsv(strafes, filename = "strafe-evaluation-export.csv") {
   if (!strafes || strafes.length === 0) {
-    alert("Aucune donnée de strafe à exporter.");
+    alert(t("csv.noData"));
     return false;
   }
 
+  const currentSettings = loadSettings();
+  const leftKey = formatKeyDisplay(currentSettings?.keys?.left || "A");
+  const rightKey = formatKeyDisplay(currentSettings?.keys?.right || "D");
+
   const headers = [
-    "Date_Heure",
-    "Type",
-    "Duree_ms",
-    "Direction",
-    "Diagonale",
-    "Delai_Tir_ms",
-    "Vitesse_Residuelle_u_s",
-    "Tir_Precis_CS2",
+    t("csv.dateTime"),
+    t("csv.type"),
+    t("csv.durationMs"),
+    t("csv.direction"),
+    t("csv.diagonal"),
+    t("csv.shotDelayMs"),
+    t("csv.residualSpeed"),
+    t("csv.accurateShot"),
   ];
 
   const rows = strafes.map((s) => {
@@ -22,10 +28,10 @@ export function exportStrafesToCsv(strafes, filename = "strafe-evaluation-export
     const hasShot = s.shot_delay != null;
     const durationMs = (s.duration / 1000).toFixed(1);
     const shotDelayMs = hasShot ? (s.shot_delay / 1000).toFixed(1) : "N/A";
-    const dir = s.direction === "RightToLeft" ? "D -> A" : "A -> D";
-    const isDiag = s.is_diagonal ? "Oui" : "Non";
+    const dir = s.direction === "RightToLeft" ? `${rightKey} -> ${leftKey}` : `${leftKey} -> ${rightKey}`;
+    const isDiag = s.is_diagonal ? t("csv.yes") : t("csv.no");
     const speed = hasShot && evalResult ? evalResult.residualSpeed : "N/A";
-    const accurate = hasShot && evalResult ? (evalResult.isAccurate ? "Oui" : "Non") : "N/A";
+    const accurate = hasShot && evalResult ? (evalResult.isAccurate ? t("csv.yes") : t("csv.no")) : "N/A";
     const timestamp = s.timestamp || new Date().toISOString();
 
     return [

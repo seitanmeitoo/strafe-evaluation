@@ -25,12 +25,14 @@ export default function App() {
   const [isSessionsOpen, setIsSessionsOpen] = createSignal(false);
   const [isOverlayOpen, setIsOverlayOpen] = createSignal(false);
   const [isOverlayLocked, setIsOverlayLocked] = createSignal(false);
+  const [isCurrentSessionSaved, setIsCurrentSessionSaved] = createSignal(false);
 
   function resetStrafes() {
     const list = totalStrafes();
-    if (list.length >= 3) {
+    if (list.length >= 3 && !isCurrentSessionSaved()) {
       saveSessionSnapshot(list);
     }
+    setIsCurrentSessionSaved(false);
     setTotalStrafes([]);
     emit("strafe-reset", {}).catch(() => {});
   }
@@ -41,8 +43,13 @@ export default function App() {
       alert(t("dashboard.noStrafeToSave"));
       return;
     }
+    if (isCurrentSessionSaved()) {
+      alert(t("dashboard.sessionSaved", { count: list.length }));
+      return;
+    }
     const saved = saveSessionSnapshot(list);
     if (saved) {
+      setIsCurrentSessionSaved(true);
       alert(t("dashboard.sessionSaved", { count: saved.totalStrafes }));
     }
   }
@@ -81,20 +88,36 @@ export default function App() {
   }
 
   async function handleSaveSettings(newSettings) {
-    setSettings(newSettings);
-    saveSettings(newSettings);
-    if (newSettings.language) {
-      setLanguage(newSettings.language);
-    }
+    const syncErrors = [];
+
     try {
       await invoke("set_monitored_keys", { keys: newSettings.keys });
+    } catch (e) {
+      console.error("Failed to sync monitored keys to backend:", e);
+      syncErrors.push(`Touches : ${e}`);
+    }
+
+    try {
       await invoke("set_thresholds", {
         perfectThresholdMs: newSettings.perfectThresholdMs,
         maxStrafeMs: newSettings.maxStrafeMs,
       });
     } catch (e) {
-      console.error("Failed to sync settings to backend:", e);
+      console.error("Failed to sync thresholds to backend:", e);
+      syncErrors.push(`Seuils : ${e}`);
     }
+
+    if (syncErrors.length > 0) {
+      alert("Erreur de synchronisation avec le backend :\n" + syncErrors.join("\n"));
+      return;
+    }
+
+    setSettings(newSettings);
+    saveSettings(newSettings);
+    if (newSettings.language) {
+      setLanguage(newSettings.language);
+    }
+    emit("settings-changed", newSettings).catch(() => {});
   }
 
   function toggleTheme() {
@@ -102,6 +125,7 @@ export default function App() {
     const updated = { ...settings(), theme: nextTheme };
     setSettings(updated);
     saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
   }
 
   function toggleLanguage() {
@@ -110,6 +134,7 @@ export default function App() {
     const updated = { ...settings(), language: nextLang };
     setSettings(updated);
     saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
   }
 
   const isDark = () => settings().theme !== "light";
@@ -143,6 +168,9 @@ export default function App() {
 
   onMount(() => {
     let unlistenStrafe;
+    let unlistenSettings;
+    let unlistenOverlayVis;
+    let unlistenOverlayLock;
 
     const setupApp = async () => {
       const hasStoredSettings = Boolean(
@@ -154,37 +182,7 @@ export default function App() {
         setLanguage(current.language);
       }
 
-      try {
-        const backendSettings = await invoke("get_settings");
-        if (!hasStoredSettings && backendSettings?.detected_layout === "AZERTY") {
-          current = {
-            ...current,
-            keys: { ...PRESETS.azerty.keys },
-          };
-          setSettings(current);
-          saveSettings(current);
-        }
-
-        await invoke("set_monitored_keys", { keys: current.keys });
-        await invoke("set_thresholds", {
-          perfectThresholdMs: current.perfectThresholdMs,
-          maxStrafeMs: current.maxStrafeMs,
-        });
-
-        // Initialize and sync Overlay state
-        const overlayState = await invoke("get_overlay_state");
-        if (overlayState) {
-          setIsOverlayOpen(Boolean(overlayState.is_open));
-          setIsOverlayLocked(Boolean(overlayState.is_locked));
-        }
-        if (current.overlay?.autoStart && !overlayState?.is_open) {
-          const res = await invoke("toggle_overlay", { open: true });
-          setIsOverlayOpen(res);
-        }
-      } catch (e) {
-        console.error("Initial settings sync error:", e);
-      }
-
+      // 1. Register listeners FIRST so no event is missed during initialization
       unlistenStrafe = await listen("strafe", (event) => {
         const payload = event.payload;
         const strafe = {
@@ -197,38 +195,84 @@ export default function App() {
           timestamp: new Date().toISOString(),
         };
 
-        // Audio feedback on strafe completion
-        if (settings().audio?.enabled) {
+        // Audio feedback on strafe completion (only when overlay is closed)
+        if (settings().audio?.enabled && !isOverlayOpen()) {
           playStrafeSound(strafe.type, settings().audio?.volume ?? 0.5);
         }
 
         setTotalStrafes((prev) => [strafe, ...prev]);
+        setIsCurrentSessionSaved(false);
       });
 
-      const unlistenOverlayVis = await listen("overlay-visibility-toggled", (e) => {
+      unlistenSettings = await listen("settings-changed", (e) => {
+        if (e.payload) {
+          setSettings(e.payload);
+          if (e.payload.language && e.payload.language !== language()) {
+            setLanguage(e.payload.language);
+          }
+        }
+      });
+
+      unlistenOverlayVis = await listen("overlay-visibility-toggled", (e) => {
         setIsOverlayOpen(Boolean(e.payload?.visible));
       });
 
-      const unlistenOverlayLock = await listen("overlay-lock-toggled", (e) => {
+      unlistenOverlayLock = await listen("overlay-lock-toggled", (e) => {
         setIsOverlayLocked(Boolean(e.payload?.is_locked));
       });
 
-      unlistenOverlay = () => {
-        unlistenOverlayVis();
-        unlistenOverlayLock();
-      };
+      // 2. Perform backend invokes independently without blocking on single error
+      try {
+        const backendSettings = await invoke("get_settings");
+        if (!hasStoredSettings && backendSettings?.detected_layout === "AZERTY") {
+          current = {
+            ...current,
+            keys: { ...PRESETS.azerty.keys },
+          };
+          setSettings(current);
+          saveSettings(current);
+        }
+      } catch (e) {
+        console.error("Initial layout query error:", e);
+      }
+
+      try {
+        await invoke("set_monitored_keys", { keys: current.keys });
+      } catch (e) {
+        console.error("Initial set_monitored_keys error:", e);
+      }
+
+      try {
+        await invoke("set_thresholds", {
+          perfectThresholdMs: current.perfectThresholdMs,
+          maxStrafeMs: current.maxStrafeMs,
+        });
+      } catch (e) {
+        console.error("Initial set_thresholds error:", e);
+      }
+
+      try {
+        const overlayState = await invoke("get_overlay_state");
+        if (overlayState) {
+          setIsOverlayOpen(Boolean(overlayState.is_open));
+          setIsOverlayLocked(Boolean(overlayState.is_locked));
+        }
+        if (current.overlay?.autoStart && !overlayState?.is_open) {
+          const res = await invoke("toggle_overlay", { open: true });
+          setIsOverlayOpen(res);
+        }
+      } catch (e) {
+        console.error("Initial overlay sync error:", e);
+      }
     };
 
-    let unlistenOverlay;
     setupApp();
 
     onCleanup(() => {
-      if (typeof unlistenStrafe === "function") {
-        unlistenStrafe();
-      }
-      if (typeof unlistenOverlay === "function") {
-        unlistenOverlay();
-      }
+      if (typeof unlistenStrafe === "function") unlistenStrafe();
+      if (typeof unlistenSettings === "function") unlistenSettings();
+      if (typeof unlistenOverlayVis === "function") unlistenOverlayVis();
+      if (typeof unlistenOverlayLock === "function") unlistenOverlayLock();
     });
   });
 
@@ -491,6 +535,16 @@ export default function App() {
             perfectStrafes={perfectStrafes()}
             colorblindMode={settings().colorblindMode}
           />
+          <div
+            className="text-[10px] text-slate-400 text-center mt-1 cursor-help select-none"
+            title={
+              language() === "fr"
+                ? "Les strafes Perfect (écart sous le seuil) ont une durée comptabilisée à 0 ms dans la colonne Tous."
+                : "Perfect strafes (sub-threshold timing) have their duration recorded as 0 ms in the All column."
+            }
+          >
+            ℹ️ {language() === "fr" ? "Perfect = 0 ms dans « Tous »" : "Perfect = 0 ms in 'All'"}
+          </div>
         </div>
 
         {/* Right column: Histogram Chart & Trend Mode */}
@@ -509,6 +563,7 @@ export default function App() {
             visualGoals={settings().visualGoals}
             theme={settings().theme}
             colorblindMode={settings().colorblindMode}
+            maxStrafeMs={settings().maxStrafeMs}
           />
         </div>
       </div>

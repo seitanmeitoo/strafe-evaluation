@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { ACCURATE_SPEED_THRESHOLD } from "../utils/cs2Physics";
 
 export default function Cs2MetricsCard(props) {
   const metrics = () =>
@@ -58,7 +59,7 @@ export default function Cs2MetricsCard(props) {
         <span
           className={`text-xl font-extrabold ${
             hasShots()
-              ? metrics().avgResidualSpeed <= 85
+              ? metrics().avgResidualSpeed <= ACCURATE_SPEED_THRESHOLD
                 ? "text-emerald-400"
                 : "text-rose-400"
               : "text-slate-500"
