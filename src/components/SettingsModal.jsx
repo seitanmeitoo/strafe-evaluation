@@ -9,10 +9,37 @@ import {
   normalizeKey,
   formatKeyDisplay,
   STRAFE_SYMBOLS,
+  getStrafeColors,
 } from "../utils/settings";
 import { playStrafeSound } from "../utils/audio";
 import { open } from "@tauri-apps/api/shell";
 import { t } from "../i18n";
+import { CloseIcon } from "./Icons";
+
+// Shared style strings (same look as the buttons of the main window).
+const btn =
+  "h-8 px-3 rounded-md border border-line bg-card text-ink text-[13px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
+const btnSm =
+  "h-7 px-2.5 rounded-md border border-line bg-card text-ink text-[12px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
+const btnPrimary =
+  "h-8 px-3 rounded-md bg-accent text-accent-ink text-[13px] font-semibold hover:opacity-90 transition-opacity cursor-pointer select-none";
+const iconBtn =
+  "h-8 w-8 flex items-center justify-center rounded-md border border-line bg-card text-ink hover:border-muted transition-colors cursor-pointer select-none";
+const choice = (active) =>
+  `rounded-md border bg-card text-[13px] transition-colors cursor-pointer select-none ${
+    active
+      ? "border-accent ring-1 ring-accent text-ink font-semibold"
+      : "border-line text-muted hover:border-muted hover:text-ink"
+  }`;
+const numInput =
+  "h-7 bg-card border border-line rounded-md px-2 text-right text-[13px] font-semibold text-ink focus:outline-none focus:border-accent";
+const keycap =
+  "rounded-md bg-key border-b-2 border-key-edge px-2 py-0.5 text-[12px] font-bold";
+const accentCls = "accent-[rgb(var(--color-accent))]";
+const sectionBase = "py-4 border-t border-line first:border-t-0";
+const section = `${sectionBase} space-y-3`;
+const sectionTitle = "text-[13px] font-semibold";
+const desc = "text-[12px] text-muted";
 
 export default function SettingsModal(props) {
   const [keys, setKeys] = createSignal({ ...DEFAULT_SETTINGS.keys });
@@ -222,61 +249,55 @@ export default function SettingsModal(props) {
     playStrafeSound(type, audioVolume());
   }
 
+  const colors = () => getStrafeColors(colorblindMode());
+
+  const keyRows = [
+    { dir: "left", label: "settings.keyLeft" },
+    { dir: "right", label: "settings.keyRight" },
+    { dir: "forward", label: "settings.keyForward" },
+    { dir: "backward", label: "settings.keyBackward" },
+  ];
+
   return (
     <Show when={props.isOpen}>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none"
+        className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 select-none"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             handleCancel();
           }
         }}
       >
-        <div className="bg-[#1e293b] text-white rounded-2xl shadow-2xl border border-slate-700 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="bg-surface text-ink rounded-xl border border-line shadow-lg w-full max-w-xl max-h-[calc(100vh-48px)] flex flex-col overflow-hidden text-[13px]">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 py-4 border-b border-slate-700 bg-[#0f172a]">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚙️</span>
-              <h2 className="text-lg font-bold text-slate-100 tracking-wide">
-                {t("settings.title")}
-              </h2>
-            </div>
+          <div className="h-12 shrink-0 flex justify-between items-center px-5 border-b border-line">
+            <h2 className="text-base font-bold">{t("settings.title")}</h2>
             <button
               type="button"
-              className="text-slate-400 hover:text-white text-lg font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className={iconBtn}
               onClick={handleCancel}
               title={t("settings.close")}
             >
-              ✕
+              <CloseIcon />
             </button>
           </div>
 
           {/* Modal body */}
-          <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(92vh-130px)] text-sm">
-            {/* Theme Section */}
-            <div>
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block mb-2">
-                {t("settings.themeSection")}
-              </label>
-              <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 text-xs max-w-xs">
+          <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5">
+            {/* Theme */}
+            <div className={`${sectionBase} flex items-center justify-between`}>
+              <h3 className={sectionTitle}>{t("settings.themeSection")}</h3>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    theme() === "dark"
-                      ? "bg-sky-500 text-white font-bold shadow-sm"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
+                  className={`${choice(theme() === "dark")} h-8 w-20`}
                   onClick={() => setTheme("dark")}
                 >
                   {t("settings.themeDark")}
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    theme() === "light"
-                      ? "bg-sky-500 text-white font-bold shadow-sm"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
+                  className={`${choice(theme() === "light")} h-8 w-20`}
                   onClick={() => setTheme("light")}
                 >
                   {t("settings.themeLight")}
@@ -284,117 +305,93 @@ export default function SettingsModal(props) {
               </div>
             </div>
 
-            {/* Colorblind Mode & Accessibility */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-2">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                {t("settings.colorblindSection")}
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {/* Colors */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.colorblindSection")}</h3>
+              <div className="grid grid-cols-3 gap-2">
                 <For each={Object.values(COLORBLIND_PALETTES)}>
                   {(pal) => (
                     <button
                       type="button"
-                      className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                        colorblindMode() === pal.id
-                          ? "bg-slate-800 border-sky-400 shadow-md ring-1 ring-sky-400/40"
-                          : "bg-slate-900/50 hover:bg-slate-850 border-slate-700/60 text-slate-300"
-                      }`}
+                      className={`${choice(colorblindMode() === pal.id)} px-3 py-2 flex items-center justify-between gap-2 text-left`}
                       onClick={() => setColorblindMode(pal.id)}
                     >
-                      <span className="text-xs font-semibold block">
+                      <span>
                         {t(`settings.colorblind${pal.id.charAt(0).toUpperCase() + pal.id.slice(1)}`)}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-1">
                         <span
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
+                          className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black"
                           style={{ "background-color": pal.early }}
-                          title="Early"
+                          title={t("table.early")}
                         >
                           {STRAFE_SYMBOLS.early}
                         </span>
                         <span
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
+                          className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black"
                           style={{ "background-color": pal.late }}
-                          title="Late"
+                          title={t("table.late")}
                         >
                           {STRAFE_SYMBOLS.late}
                         </span>
                         <span
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
+                          className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black"
                           style={{ "background-color": pal.perfect }}
-                          title="Perfect"
+                          title={t("table.perfect")}
                         >
                           {STRAFE_SYMBOLS.perfect}
                         </span>
-                      </div>
+                      </span>
                     </button>
                   )}
                 </For>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                {t("settings.colorblindHint")}
-              </p>
+              <p className={desc}>{t("settings.colorblindHint")}</p>
             </div>
 
-            {/* Audio Feedback section */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            {/* Audio feedback */}
+            <div className={section}>
               <div className="flex justify-between items-center">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider">
-                  {t("settings.audioSection")}
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <h3 className={sectionTitle}>{t("settings.audioSection")}</h3>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={audioEnabled()}
                     onChange={(e) => setAudioEnabled(e.target.checked)}
-                    className="accent-sky-500 rounded cursor-pointer"
+                    className={`${accentCls} cursor-pointer`}
                   />
                   <span>{t("settings.audioEnable")}</span>
                 </label>
               </div>
 
               <Show when={audioEnabled()}>
-                <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-3">
+                <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-300">{t("settings.audioVolume")}</span>
-                    <span className="text-xs font-mono font-bold text-sky-400">
-                      {Math.round(audioVolume() * 100)}%
-                    </span>
+                    <span>{t("settings.audioVolume")}</span>
+                    <span className="font-semibold">{Math.round(audioVolume() * 100)}%</span>
                   </div>
                   <input
                     type="range"
                     min="0"
                     max="1"
                     step="0.05"
-                    className="w-full accent-sky-500 cursor-pointer"
+                    className={`w-full ${accentCls} cursor-pointer`}
                     value={audioVolume()}
                     onInput={(e) => setAudioVolume(parseFloat(e.target.value) || 0)}
                   />
 
                   {/* Audio preview buttons */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] text-slate-400">{t("settings.audioTest")}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs hover:bg-emerald-500/30 cursor-pointer transition-all"
-                        onClick={() => testSound("Perfect")}
-                      >
-                        ✨ Perfect
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={desc}>{t("settings.audioTest")}</span>
+                    <div className="flex items-center gap-2">
+                      <button type="button" className={btnSm} onClick={() => testSound("Perfect")}>
+                        {t("table.perfect")}
                       </button>
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs hover:bg-sky-500/30 cursor-pointer transition-all"
-                        onClick={() => testSound("Early")}
-                      >
-                        ⏱️ Early
+                      <button type="button" className={btnSm} onClick={() => testSound("Early")}>
+                        {t("table.early")}
                       </button>
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs hover:bg-amber-500/30 cursor-pointer transition-all"
-                        onClick={() => testSound("Late")}
-                      >
-                        ⏱️ Late
+                      <button type="button" className={btnSm} onClick={() => testSound("Late")}>
+                        {t("table.late")}
                       </button>
                     </div>
                   </div>
@@ -402,212 +399,122 @@ export default function SettingsModal(props) {
               </Show>
             </div>
 
-            {/* In-Game Overlay HUD Mode */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            {/* In-game overlay */}
+            <div className={section}>
               <div className="flex justify-between items-center">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🪟</span>
-                  <span>{t("settings.overlaySection")}</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <h3 className={sectionTitle}>{t("settings.overlaySection")}</h3>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={overlayAutoStart()}
                     onChange={(e) => setOverlayAutoStart(e.target.checked)}
-                    className="accent-sky-500 rounded cursor-pointer"
+                    className={`${accentCls} cursor-pointer`}
                   />
                   <span>{t("settings.overlayAutoStart")}</span>
                 </label>
               </div>
 
-              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-3">
+              <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-300">{t("settings.overlayOpacity")}</span>
-                  <span className="text-xs font-mono font-bold text-sky-400">
-                    {Math.round(overlayOpacity() * 100)}%
-                  </span>
+                  <span>{t("settings.overlayOpacity")}</span>
+                  <span className="font-semibold">{Math.round(overlayOpacity() * 100)}%</span>
                 </div>
                 <input
                   type="range"
                   min="0.3"
                   max="1"
                   step="0.05"
-                  className="w-full accent-sky-500 cursor-pointer"
+                  className={`w-full ${accentCls} cursor-pointer`}
                   value={overlayOpacity()}
                   onInput={(e) => setOverlayOpacity(parseFloat(e.target.value) || 0.85)}
                 />
-
-                {/* Shortcuts & Click-Through explanation */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
-                      {t("settings.overlayToggleShortcut")}
-                    </div>
-                    <div className="text-xs font-mono font-bold text-sky-400 mt-0.5">Alt + O</div>
-                  </div>
-                  <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
-                      {t("settings.overlayLockShortcut")}
-                    </div>
-                    <div className="text-xs font-mono font-bold text-amber-400 mt-0.5">Ctrl + F11</div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  💡 {t("settings.overlayHint")}
-                </p>
               </div>
+
+              {/* Shortcuts */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span>{t("settings.overlayToggleShortcut")}</span>
+                  <span className={keycap}>Alt + O</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>{t("settings.overlayLockShortcut")}</span>
+                  <span className={keycap}>Ctrl + F11</span>
+                </div>
+              </div>
+              <p className={desc}>{t("settings.overlayHint")}</p>
             </div>
 
-            {/* Section 1: Key Rebinding */}
-            <div className="border-t border-slate-700/60 pt-4">
-              <div className="flex justify-between items-center mb-2">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider">
-                  {t("settings.keysSection")}
-                </label>
-              </div>
+            {/* Movement keys */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.keysSection")}</h3>
 
               {/* Preset buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                <span className="text-[11px] text-slate-400 mr-1">
-                  {t("settings.keysPresetLabel")}
-                </span>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("qwerty")}
-                >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`${desc} mr-1`}>{t("settings.keysPresetLabel")}</span>
+                <button type="button" className={btnSm} onClick={() => applyPreset("qwerty")}>
                   QWERTY
                 </button>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("azerty")}
-                >
+                <button type="button" className={btnSm} onClick={() => applyPreset("azerty")}>
                   AZERTY
                 </button>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("arrows")}
-                >
+                <button type="button" className={btnSm} onClick={() => applyPreset("arrows")}>
                   {t("settings.presetArrows")}
                 </button>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("esdf")}
-                >
+                <button type="button" className={btnSm} onClick={() => applyPreset("esdf")}>
                   ESDF
                 </button>
               </div>
 
-              {/* Grid 2x2 of movement keys */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-900/40 p-3 rounded-xl border border-slate-700/50">
-                {/* Left */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyLeft")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "left"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-sky-400 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("left")}
-                  >
-                    {activeRebind() === "left" ? "..." : formatKeyDisplay(keys().left)}
-                  </button>
-                </div>
-
-                {/* Right */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyRight")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "right"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-sky-400 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("right")}
-                  >
-                    {activeRebind() === "right" ? "..." : formatKeyDisplay(keys().right)}
-                  </button>
-                </div>
-
-                {/* Forward */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyForward")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "forward"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("forward")}
-                  >
-                    {activeRebind() === "forward" ? "..." : formatKeyDisplay(keys().forward)}
-                  </button>
-                </div>
-
-                {/* Backward */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyBackward")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "backward"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("backward")}
-                  >
-                    {activeRebind() === "backward" ? "..." : formatKeyDisplay(keys().backward)}
-                  </button>
-                </div>
+              {/* 2x2 grid of movement keys */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                <For each={keyRows}>
+                  {(row) => (
+                    <div className="flex items-center justify-between">
+                      <span>{t(row.label)}</span>
+                      <button
+                        type="button"
+                        className={`min-w-14 h-8 px-2 rounded-md font-bold text-center text-[13px] cursor-pointer transition-colors ${
+                          activeRebind() === row.dir
+                            ? "bg-key-on border-b border-key-edge translate-y-[3px]"
+                            : "bg-key border-b-4 border-key-edge hover:border-muted"
+                        }`}
+                        onClick={() => setActiveRebind(row.dir)}
+                      >
+                        {activeRebind() === row.dir ? "..." : formatKeyDisplay(keys()[row.dir])}
+                      </button>
+                    </div>
+                  )}
+                </For>
               </div>
 
               <Show when={rebindError()}>
-                <p className="text-xs text-rose-400 font-medium bg-rose-950/40 border border-rose-800/50 rounded-lg p-2 text-center mt-2">
+                <p className="text-[12px] font-medium text-center rounded-md border border-line bg-panel px-3 py-1.5">
                   {rebindError()}
                 </p>
               </Show>
             </div>
 
-            {/* Section 2: Tolerances */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                {t("settings.tolerancesSection")}
-              </label>
+            {/* Tolerances */}
+            <div className={`${sectionBase} space-y-4`}>
+              <h3 className={sectionTitle}>{t("settings.tolerancesSection")}</h3>
 
-              {/* Perfect Threshold */}
-              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-1.5">
+              {/* Perfect threshold */}
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-200">
-                    {t("settings.perfectWindow")}
-                  </span>
-                  <div className="flex items-center gap-1">
+                  <span className="font-medium">{t("settings.perfectWindow")}</span>
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       step="0.1"
                       min="0"
                       max="10"
-                      className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-right font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+                      className={`w-16 ${numInput}`}
                       value={perfectThresholdMs()}
                       onInput={(e) =>
                         setPerfectThresholdMs(parseFloat(e.target.value) || 0)
                       }
                     />
-                    <span className="text-xs text-slate-400">ms</span>
+                    <span className={desc}>ms</span>
                   </div>
                 </div>
                 <input
@@ -615,36 +522,32 @@ export default function SettingsModal(props) {
                   min="0"
                   max="10"
                   step="0.1"
-                  className="w-full accent-emerald-500 cursor-pointer"
+                  className={`w-full ${accentCls} cursor-pointer`}
                   value={perfectThresholdMs()}
                   onInput={(e) =>
                     setPerfectThresholdMs(parseFloat(e.target.value) || 0)
                   }
                 />
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  {t("settings.perfectWindowDesc")}
-                </p>
+                <p className={desc}>{t("settings.perfectWindowDesc")}</p>
               </div>
 
               {/* Max strafe duration */}
-              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-1.5">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-200">
-                    {t("settings.maxDuration")}
-                  </span>
-                  <div className="flex items-center gap-1">
+                  <span className="font-medium">{t("settings.maxDuration")}</span>
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       step="10"
                       min="50"
                       max="500"
-                      className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-right font-bold text-sky-400 focus:outline-none focus:border-sky-400"
+                      className={`w-16 ${numInput}`}
                       value={maxStrafeMs()}
                       onInput={(e) =>
                         setMaxStrafeMs(parseInt(e.target.value, 10) || 250)
                       }
                     />
-                    <span className="text-xs text-slate-400">ms</span>
+                    <span className={desc}>ms</span>
                   </div>
                 </div>
                 <input
@@ -652,127 +555,101 @@ export default function SettingsModal(props) {
                   min="50"
                   max="500"
                   step="10"
-                  className="w-full accent-sky-500 cursor-pointer"
+                  className={`w-full ${accentCls} cursor-pointer`}
                   value={maxStrafeMs()}
                   onInput={(e) =>
                     setMaxStrafeMs(parseInt(e.target.value, 10) || 250)
                   }
                 />
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  {t("settings.maxDurationDesc")}
-                </p>
+                <p className={desc}>{t("settings.maxDurationDesc")}</p>
               </div>
             </div>
 
-            {/* Section 3: Visual Goals */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            {/* Visual goals */}
+            <div className={section}>
               <div className="flex justify-between items-center">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider">
-                  {t("settings.goalsSection")}
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <h3 className={sectionTitle}>{t("settings.goalsSection")}</h3>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={goalsEnabled()}
                     onChange={(e) => setGoalsEnabled(e.target.checked)}
-                    className="accent-sky-500 rounded cursor-pointer"
+                    className={`${accentCls} cursor-pointer`}
                   />
                   <span>{t("settings.goalsEnable")}</span>
                 </label>
               </div>
 
               <Show when={goalsEnabled()}>
-                <div className="grid grid-cols-2 gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-700/50">
+                <div className="grid grid-cols-2 gap-x-8">
                   {/* Early goal */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
-                      <span className="text-xs font-medium text-slate-200">
-                        {t("settings.goalsEarly")}
-                      </span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <span style={{ color: colors().early }}>{STRAFE_SYMBOLS.early}</span>
+                      <span>{t("settings.goalsEarly")}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="number"
                         min="1"
                         max="100"
-                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 font-bold text-white focus:outline-none focus:border-sky-400 text-sm"
+                        className={`w-20 ${numInput}`}
                         value={earlyTargetMs()}
                         onInput={(e) =>
                           setEarlyTargetMs(parseInt(e.target.value, 10) || 15)
                         }
                       />
-                      <span className="text-xs text-slate-400">ms</span>
+                      <span className={desc}>ms</span>
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      {t("settings.goalsEarlyDesc")}
-                    </p>
+                    <p className={desc}>{t("settings.goalsEarlyDesc")}</p>
                   </div>
 
                   {/* Late goal */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="text-xs font-medium text-slate-200">
-                        {t("settings.goalsLate")}
-                      </span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <span style={{ color: colors().late }}>{STRAFE_SYMBOLS.late}</span>
+                      <span>{t("settings.goalsLate")}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="number"
                         min="1"
                         max="100"
-                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 font-bold text-white focus:outline-none focus:border-amber-400 text-sm"
+                        className={`w-20 ${numInput}`}
                         value={lateTargetMs()}
                         onInput={(e) =>
                           setLateTargetMs(parseInt(e.target.value, 10) || 20)
                         }
                       />
-                      <span className="text-xs text-slate-400">ms</span>
+                      <span className={desc}>ms</span>
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      {t("settings.goalsLateDesc")}
-                    </p>
+                    <p className={desc}>{t("settings.goalsLateDesc")}</p>
                   </div>
                 </div>
               </Show>
             </div>
 
-            {/* Rapid Trigger & Analog Keyboards Section */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                ⚡ {t("settings.rapidTriggerSection")}
-              </label>
-              <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-700/50 space-y-2.5">
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  {t("settings.rapidTriggerDesc")}
-                </p>
-                <button
-                  type="button"
-                  className="w-full py-2 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                  onClick={applyRapidTriggerPreset}
-                >
+            {/* Rapid Trigger / analog keyboards */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.rapidTriggerSection")}</h3>
+              <p className={desc}>{t("settings.rapidTriggerDesc")}</p>
+              <div className="flex items-center gap-3">
+                <button type="button" className={btn} onClick={applyRapidTriggerPreset}>
                   {t("settings.rapidTriggerPresetBtn")}
                 </button>
                 <Show when={rapidTriggerNotice()}>
-                  <p className="text-[11px] text-emerald-400 font-semibold text-center animate-in fade-in">
-                    ✓ {t("settings.rapidTriggerApplied")}
-                  </p>
+                  <p className="text-[12px] font-semibold">{t("settings.rapidTriggerApplied")}</p>
                 </Show>
               </div>
             </div>
 
-            {/* About Section */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-2">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                {t("settings.aboutTitle")}
-              </label>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                {t("settings.aboutText")}
-              </p>
+            {/* About */}
+            <div className={`${sectionBase} space-y-2`}>
+              <h3 className={sectionTitle}>{t("settings.aboutTitle")}</h3>
+              <p className={desc}>{t("settings.aboutText")}</p>
               <button
                 type="button"
-                className="text-xs text-sky-400 hover:text-sky-300 underline cursor-pointer transition-colors"
+                className="text-[13px] font-medium text-ink underline underline-offset-4 hover:text-accent cursor-pointer transition-colors"
                 onClick={async () => {
                   try {
                     await open("https://github.com/patrikzudel/strafe-evaluation");
@@ -787,28 +664,16 @@ export default function SettingsModal(props) {
           </div>
 
           {/* Footer actions */}
-          <div className="px-6 py-4 border-t border-slate-700 bg-[#0f172a] flex justify-between items-center">
-            <button
-              type="button"
-              className="text-xs font-medium text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer"
-              onClick={handleReset}
-            >
+          <div className="h-14 shrink-0 px-5 border-t border-line flex justify-between items-center">
+            <button type="button" className={btn} onClick={handleReset}>
               {t("settings.defaultBtn")}
             </button>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="text-xs font-medium text-slate-300 hover:text-white px-4 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer"
-                onClick={handleCancel}
-              >
+              <button type="button" className={btn} onClick={handleCancel}>
                 {t("settings.cancelBtn")}
               </button>
-              <button
-                type="button"
-                className="text-xs font-bold text-white px-5 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 shadow-md transition-all cursor-pointer"
-                onClick={handleSave}
-              >
+              <button type="button" className={btnPrimary} onClick={handleSave}>
                 {t("settings.saveBtn")}
               </button>
             </div>

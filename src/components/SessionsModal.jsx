@@ -1,13 +1,26 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { loadSessions, deleteSession, clearAllSessions } from "../utils/sessions";
+import { loadSettings, getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
 import { t } from "../i18n";
+import { CloseIcon } from "./Icons";
+
+// Shared style strings (same look as the buttons of the main window).
+const btn =
+  "h-8 px-3 rounded-md border border-line bg-card text-ink text-[13px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
+const iconBtn =
+  "h-8 w-8 flex items-center justify-center rounded-md border border-line bg-card text-ink hover:border-muted transition-colors cursor-pointer select-none";
+const swatch =
+  "w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black";
 
 export default function SessionsModal(props) {
   const [sessions, setSessions] = createSignal([]);
+  const [colors, setColors] = createSignal(getStrafeColors());
 
   createEffect(() => {
     if (props.isOpen) {
       setSessions(loadSessions());
+      // Use the strafe colors of the palette currently selected in the settings.
+      setColors(getStrafeColors(loadSettings()?.colorblindMode));
     }
   });
 
@@ -46,117 +59,113 @@ export default function SessionsModal(props) {
     }
   }
 
+  const SummaryItem = (p) => (
+    <div className="flex flex-col">
+      <span className="text-[12px] text-muted">{p.label}</span>
+      <span className="text-[17px] font-bold leading-tight">{p.value}</span>
+    </div>
+  );
+
   return (
     <Show when={props.isOpen}>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none"
+        className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 select-none"
         onClick={(e) => {
           if (e.target === e.currentTarget) props.onClose();
         }}
       >
-        <div className="bg-[#1e293b] text-white rounded-2xl shadow-2xl border border-slate-700 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="bg-surface text-ink rounded-xl border border-line shadow-lg w-full max-w-2xl max-h-[calc(100vh-48px)] flex flex-col overflow-hidden text-[13px]">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 py-4 border-b border-slate-700 bg-[#0f172a]">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">📈</span>
-              <h2 className="text-lg font-bold text-slate-100 tracking-wide">
-                {t("sessions.title")}
-              </h2>
-            </div>
+          <div className="h-12 shrink-0 flex justify-between items-center px-5 border-b border-line">
+            <h2 className="text-base font-bold">{t("sessions.title")}</h2>
             <button
               type="button"
-              className="text-slate-400 hover:text-white text-lg font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className={iconBtn}
               onClick={props.onClose}
               title={t("sessions.close")}
             >
-              ✕
+              <CloseIcon />
             </button>
           </div>
 
-          {/* Quick stats summary cards */}
-          <div className="grid grid-cols-3 gap-3 p-4 bg-slate-900/40 border-b border-slate-800 text-center">
-            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
-              <span className="text-[11px] text-slate-400 uppercase tracking-wider block">
-                {t("sessions.totalSessions")}
-              </span>
-              <span className="text-xl font-extrabold text-slate-100">
-                {sessions().length}
-              </span>
-            </div>
-            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
-              <span className="text-[11px] text-slate-400 uppercase tracking-wider block">
-                {t("sessions.totalStrafes")}
-              </span>
-              <span className="text-xl font-extrabold text-sky-400">
-                {totalCumulativeStrafes()}
-              </span>
-            </div>
-            <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700/50">
-              <span className="text-[11px] text-slate-400 uppercase tracking-wider block">
-                {t("sessions.bestAccuracy")}
-              </span>
-              <span className="text-xl font-extrabold text-emerald-400">
-                {bestAccurateRate()}
-              </span>
-            </div>
+          {/* Quick stats summary */}
+          <div className="shrink-0 grid grid-cols-3 gap-4 px-5 py-3 border-b border-line">
+            <SummaryItem label={t("sessions.totalSessions")} value={sessions().length} />
+            <SummaryItem label={t("sessions.totalStrafes")} value={totalCumulativeStrafes()} />
+            <SummaryItem label={t("sessions.bestAccuracy")} value={bestAccurateRate()} />
           </div>
 
           {/* Session list */}
-          <div className="p-4 space-y-2.5 overflow-y-auto max-h-[calc(90vh-210px)] text-sm">
+          <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5">
             <Show
               when={sessions().length > 0}
               fallback={
-                <div className="py-12 text-center text-slate-400">
-                  <p className="text-base font-medium">{t("sessions.emptyNotice")}</p>
+                <div className="py-12 text-center text-muted">
+                  <p>{t("sessions.emptyNotice")}</p>
                 </div>
               }
             >
               <For each={sessions()}>
                 {(session) => (
-                  <div className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/70 p-3 rounded-xl flex items-center justify-between gap-4 transition-all">
-                    {/* Date & Strafe count */}
-                    <div className="min-w-32">
-                      <span className="text-xs font-semibold text-slate-200 block">
+                  <div className="py-2.5 border-b border-line last:border-b-0 grid grid-cols-[112px_1fr_auto_auto] items-center gap-4">
+                    {/* Date & strafe count */}
+                    <div>
+                      <span className="font-semibold block">
                         {formatDate(session.timestamp)}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-medium">
+                      <span className="text-[12px] text-muted">
                         {session.totalStrafes} strafes
                       </span>
                     </div>
 
                     {/* Proportions: Perfect / Early / Late */}
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="text-emerald-400 font-bold" title={t("sessions.perfectTitle")}>
-                        ✨ {session.perfectCount} ({session.perfectRate}%)
+                    <div className="flex items-center gap-4">
+                      <span className="flex items-center gap-1.5" title={t("sessions.perfectTitle")}>
+                        <span className={swatch} style={{ "background-color": colors().perfect }}>
+                          {STRAFE_SYMBOLS.perfect}
+                        </span>
+                        <span className="font-semibold">
+                          {session.perfectCount} {t("table.perfect")} ({session.perfectRate}%)
+                        </span>
                       </span>
-                      <span className="text-sky-400 font-medium" title={t("sessions.earlyTitle")}>
-                        ⏱️ {session.earlyCount} Early
+                      <span className="flex items-center gap-1.5" title={t("sessions.earlyTitle")}>
+                        <span className={swatch} style={{ "background-color": colors().early }}>
+                          {STRAFE_SYMBOLS.early}
+                        </span>
+                        <span>
+                          {session.earlyCount} {t("table.early")}
+                        </span>
                       </span>
-                      <span className="text-amber-400 font-medium" title={t("sessions.lateTitle")}>
-                        ⏱️ {session.lateCount} Late
+                      <span className="flex items-center gap-1.5" title={t("sessions.lateTitle")}>
+                        <span className={swatch} style={{ "background-color": colors().late }}>
+                          {STRAFE_SYMBOLS.late}
+                        </span>
+                        <span>
+                          {session.lateCount} {t("table.late")}
+                        </span>
                       </span>
                     </div>
 
-                    {/* CS2 metrics badge */}
+                    {/* CS2 metrics */}
                     <div className="text-right">
                       {session.totalShots > 0 ? (
-                        <div
-                          className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
+                        <span
+                          className={
                             session.accurateRate >= 75
-                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              ? "text-accent font-semibold"
                               : session.accurateRate >= 50
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                              : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                          }`}
+                              ? "text-ink font-medium"
+                              : "text-muted"
+                          }
                         >
-                          🎯 {session.accurateRate}% {t("metrics.accurate")} ({session.avgShotDelayMs}ms)
-                        </div>
+                          {session.accurateRate}% {t("metrics.accurate")} ({session.avgShotDelayMs}ms)
+                        </span>
                       ) : (
-                        <span className="text-[11px] text-slate-500 italic">
+                        <span className="text-[12px] text-muted italic">
                           {t("history.withoutShot")}
                         </span>
                       )}
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                      <span className="text-[12px] text-muted block">
                         {t("sessions.median")} {session.medianDurationMs}ms
                       </span>
                     </div>
@@ -164,11 +173,10 @@ export default function SessionsModal(props) {
                     {/* Delete session button */}
                     <button
                       type="button"
-                      className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-700/50 transition-colors cursor-pointer text-xs"
+                      className="text-[12px] text-muted hover:text-ink underline underline-offset-4 transition-colors cursor-pointer"
                       onClick={() => handleDelete(session.id)}
-                      title={t("sessions.deleteSession")}
                     >
-                      🗑️
+                      {t("sessions.deleteSession")}
                     </button>
                   </div>
                 )}
@@ -177,21 +185,17 @@ export default function SessionsModal(props) {
           </div>
 
           {/* Footer actions */}
-          <div className="px-6 py-3 border-t border-slate-700 bg-[#0f172a] flex justify-between items-center">
+          <div className="h-14 shrink-0 px-5 border-t border-line flex justify-between items-center">
             <button
               type="button"
-              className="text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+              className={`${btn} disabled:opacity-40 disabled:pointer-events-none`}
               disabled={sessions().length === 0}
               onClick={handleClearAll}
             >
               {t("sessions.clearHistory")}
             </button>
 
-            <button
-              type="button"
-              className="text-xs font-bold text-white px-5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-all cursor-pointer"
-              onClick={props.onClose}
-            >
+            <button type="button" className={btn} onClick={props.onClose}>
               {t("sessions.close")}
             </button>
           </div>
