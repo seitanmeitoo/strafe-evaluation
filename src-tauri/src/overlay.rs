@@ -7,32 +7,16 @@ pub struct OverlayStatePayload {
     pub is_locked: bool,
 }
 
+#[derive(Default)]
 pub struct OverlayState {
     pub is_locked: AtomicBool,
     pub is_open: AtomicBool,
 }
 
-impl Default for OverlayState {
-    fn default() -> Self {
-        Self {
-            is_locked: AtomicBool::new(false),
-            is_open: AtomicBool::new(false),
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct HotkeyTracker {
     pub prev_lock_combo: bool,
     pub prev_toggle_combo: bool,
-}
-
-impl Default for HotkeyTracker {
-    fn default() -> Self {
-        Self {
-            prev_lock_combo: false,
-            prev_toggle_combo: false,
-        }
-    }
 }
 
 pub fn get_overlay_window(handle: &AppHandle) -> Option<Window> {
@@ -66,25 +50,9 @@ pub fn set_click_through(window: &Window, ignore: bool) -> Result<(), String> {
 }
 
 pub fn ensure_overlay_window(handle: &AppHandle) -> Result<Window, String> {
-    if let Some(w) = handle.get_window("overlay") {
-        Ok(w)
-    } else {
-        tauri::WindowBuilder::new(
-            handle,
-            "overlay",
-            tauri::WindowUrl::App("index.html?overlay=true".into()),
-        )
-        .title("Strafe Overlay")
-        .inner_size(270.0, 135.0)
-        .resizable(false)
-        .decorations(false)
-        .always_on_top(true)
-        .transparent(true)
-        .skip_taskbar(true)
-        .visible(false)
-        .build()
-        .map_err(|e| format!("Failed to create overlay window: {}", e))
-    }
+    handle
+        .get_window("overlay")
+        .ok_or_else(|| "Overlay window not found".to_string())
 }
 
 pub fn set_overlay_visibility(

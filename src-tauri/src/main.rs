@@ -13,6 +13,7 @@ use overlay::{
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
+use tauri::Manager;
 use tracker::{
     check_pending_timeout, handle_directional_keys, handle_key_presses, handle_key_releases,
     handle_mouse_input, handle_overlap_eval, GameState, TrackerState,
@@ -122,6 +123,50 @@ fn get_overlay_state(state: tauri::State<Arc<OverlayState>>) -> Result<OverlaySt
     })
 }
 
+fn run_tracker_loop(
+    handle: &tauri::AppHandle,
+    game_state: &Arc<GameState>,
+    overlay_state: &Arc<OverlayState>,
+) {
+    let mut state = TrackerState::default();
+    let mut hotkey_tracker = HotkeyTracker::default();
+
+    loop {
+        std::thread::sleep(Duration::from_micros(500));
+
+        let (is_left_down, is_right_down, is_forward_down, is_backward_down, is_diagonal) = {
+            if let Ok(bindings) = game_state.key_bindings.read() {
+                (
+                    bindings.is_left_pressed(),
+                    bindings.is_right_pressed(),
+                    bindings.is_forward_pressed(),
+                    bindings.is_backward_pressed(),
+                    bindings.is_diagonal_pressed(),
+                )
+            } else {
+                (false, false, false, false, false)
+            }
+        };
+
+        let is_mouse_down = keyboard::is_mouse1_pressed();
+
+        handle_directional_keys(is_forward_down, is_backward_down, &mut state, handle);
+        handle_mouse_input(is_mouse_down, &mut state, game_state, handle);
+        handle_key_releases(is_left_down, is_right_down, &mut state, handle);
+        handle_key_presses(
+            is_left_down,
+            is_right_down,
+            is_diagonal,
+            &mut state,
+            game_state,
+            handle,
+        );
+        handle_overlap_eval(is_diagonal, &mut state, game_state, handle);
+        check_pending_timeout(game_state, handle);
+        check_overlay_hotkeys(handle, overlay_state, &mut hotkey_tracker);
+    }
+}
+
 fn main() {
     let game_state = Arc::new(GameState::new());
     let thread_game_state = Arc::clone(&game_state);
@@ -142,46 +187,59 @@ fn main() {
             toggle_overlay_lock_cmd,
             get_overlay_state
         ])
+        .on_window_event(|event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event.event() {
+                let window = event.window();
+                match window.label() {
+                    "overlay" => {
+                        api.prevent_close();
+                        if let Some(state) = window.try_state::<Arc<OverlayState>>() {
+                            let _ = set_overlay_visibility(&window.app_handle(), &state, false);
+                        }
+                    }
+                    "main" => {
+                        window.app_handle().exit(0);
+                    }
+                    _ => {}
+                }
+            }
+        })
         .setup(move |app| {
             let handle = app.handle();
 
             std::thread::spawn(move || {
-                let mut state = TrackerState::default();
-                let mut hotkey_tracker = HotkeyTracker::default();
-
+                let mut restarts = 0;
                 loop {
-                    std::thread::sleep(Duration::from_micros(500));
+                    let h = handle.clone();
+                    let gs = Arc::clone(&thread_game_state);
+                    let os = Arc::clone(&thread_overlay_state);
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                        run_tracker_loop(&h, &gs, &os);
+                    }));
 
-                    let (is_left_down, is_right_down, is_forward_down, is_backward_down, is_diagonal) = {
-                        if let Ok(bindings) = thread_game_state.key_bindings.read() {
-                            (
-                                bindings.is_left_pressed(),
-                                bindings.is_right_pressed(),
-                                bindings.is_forward_pressed(),
-                                bindings.is_backward_pressed(),
-                                bindings.is_diagonal_pressed(),
-                            )
-                        } else {
-                            (false, false, false, false, false)
+                    match result {
+                        Ok(()) => {
+                            break;
                         }
-                    };
-
-                    let is_mouse_down = keyboard::is_mouse1_pressed();
-
-                    handle_directional_keys(is_forward_down, is_backward_down, &mut state, &handle);
-                    handle_mouse_input(is_mouse_down, &mut state, &thread_game_state, &handle);
-                    handle_key_releases(is_left_down, is_right_down, &mut state, &handle);
-                    handle_key_presses(
-                        is_left_down,
-                        is_right_down,
-                        is_diagonal,
-                        &mut state,
-                        &thread_game_state,
-                        &handle,
-                    );
-                    handle_overlap_eval(is_diagonal, &mut state, &thread_game_state, &handle);
-                    check_pending_timeout(&thread_game_state, &handle);
-                    check_overlay_hotkeys(&handle, &thread_overlay_state, &mut hotkey_tracker);
+                        Err(e) => {
+                            if restarts < 5 {
+                                restarts += 1;
+                                eprintln!("Tracker loop panicked: {:?}. Restarting (attempt {}/5)...", e, restarts);
+                                {
+                                    let mut lock = thread_game_state
+                                        .pending_strafe
+                                        .lock()
+                                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                                    *lock = None;
+                                }
+                                std::thread::sleep(Duration::from_secs(1));
+                            } else {
+                                eprintln!("Tracker loop panicked 6 times (5 restarts exhausted). Terminating tracker thread.");
+                                let _ = handle.emit_all("tracker-stopped", serde_json::json!({ "restarts": 5 }));
+                                break;
+                            }
+                        }
+                    }
                 }
             });
 
