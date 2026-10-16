@@ -94,7 +94,7 @@ export default function App() {
       await invoke("set_monitored_keys", { keys: newSettings.keys });
     } catch (e) {
       console.error("Failed to sync monitored keys to backend:", e);
-      syncErrors.push(`Touches : ${e}`);
+      syncErrors.push(t("settings.syncErrorKeys", { error: e }));
     }
 
     try {
@@ -104,11 +104,11 @@ export default function App() {
       });
     } catch (e) {
       console.error("Failed to sync thresholds to backend:", e);
-      syncErrors.push(`Seuils : ${e}`);
+      syncErrors.push(t("settings.syncErrorThresholds", { error: e }));
     }
 
     if (syncErrors.length > 0) {
-      alert("Erreur de synchronisation avec le backend :\n" + syncErrors.join("\n"));
+      alert(t("settings.syncErrorBackend") + "\n" + syncErrors.join("\n"));
       return;
     }
 
@@ -328,9 +328,9 @@ export default function App() {
                 : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
             }`}
             onClick={toggleLanguage}
-            title={language() === "fr" ? "Switch to English" : "Passer en Français"}
+            title={t("header.langToggleTitle")}
           >
-            {language() === "fr" ? "🇫🇷 FR" : "🇬🇧 EN"}
+            {t("header.langToggleLabel")}
           </button>
         </div>
 
@@ -537,13 +537,9 @@ export default function App() {
           />
           <div
             className="text-[10px] text-slate-400 text-center mt-1 cursor-help select-none"
-            title={
-              language() === "fr"
-                ? "Les strafes Perfect (écart sous le seuil) ont une durée comptabilisée à 0 ms dans la colonne Tous."
-                : "Perfect strafes (sub-threshold timing) have their duration recorded as 0 ms in the All column."
-            }
+            title={t("dashboard.perfectInfoTitle")}
           >
-            ℹ️ {language() === "fr" ? "Perfect = 0 ms dans « Tous »" : "Perfect = 0 ms in 'All'"}
+            ℹ️ {t("dashboard.perfectInfoText")}
           </div>
         </div>
 

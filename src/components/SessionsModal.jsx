@@ -127,13 +127,13 @@ export default function SessionsModal(props) {
 
                     {/* Proportions: Perfect / Early / Late */}
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="text-emerald-400 font-bold" title="Strafes Parfaits">
+                      <span className="text-emerald-400 font-bold" title={t("sessions.perfectTitle")}>
                         ✨ {session.perfectCount} ({session.perfectRate}%)
                       </span>
-                      <span className="text-sky-400 font-medium" title="Strafes Early">
+                      <span className="text-sky-400 font-medium" title={t("sessions.earlyTitle")}>
                         ⏱️ {session.earlyCount} Early
                       </span>
-                      <span className="text-amber-400 font-medium" title="Strafes Late">
+                      <span className="text-amber-400 font-medium" title={t("sessions.lateTitle")}>
                         ⏱️ {session.lateCount} Late
                       </span>
                     </div>

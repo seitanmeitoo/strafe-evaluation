@@ -16,6 +16,8 @@ export default {
     passThrough: "Pass-through",
     draggable: "Move",
     settings: "Settings & Tolerances",
+    langToggleTitle: "Passer en Français",
+    langToggleLabel: "🇬🇧 EN",
   },
   dashboard: {
     statsTitle: "Statistics",
@@ -33,6 +35,8 @@ export default {
     resetTooltip: "Reset and archive current session",
     noStrafeToSave: "No strafes to save at this moment.",
     sessionSaved: "Session with {count} strafes saved successfully!",
+    perfectInfoTitle: "Perfect strafes (sub-threshold timing) have their duration recorded as 0 ms in the All column.",
+    perfectInfoText: "Perfect = 0 ms in 'All'",
   },
   metrics: {
     accurateShotsTitle: "CS2 Accurate Shots",
@@ -90,6 +94,9 @@ export default {
     earlyRatio: "Early:",
     lateRatio: "Late:",
     perfectRatio: "Perfect:",
+    perfectTitle: "Perfect Strafes",
+    earlyTitle: "Early Strafes",
+    lateTitle: "Late Strafes",
     exportCsv: "Export CSV",
     deleteSession: "Delete",
     close: "Close",
@@ -136,6 +143,9 @@ export default {
     pressKeyPrompt: "Press any key...",
     unsupportedKey: "Unsupported key. Use a letter, number, arrow key or Space.",
     duplicateKey: "Key '{key}' is already assigned to another direction.",
+    syncErrorBackend: "Failed to synchronize with backend:",
+    syncErrorKeys: "Keys: {error}",
+    syncErrorThresholds: "Thresholds: {error}",
 
     tolerancesSection: "CS2 Detection Tolerances",
     perfectWindow: "Perfect Window (0ms tolerance)",

@@ -16,6 +16,8 @@ export default {
     passThrough: "Pass-through",
     draggable: "Déplacement",
     settings: "Paramètres & Tolérances",
+    langToggleTitle: "Switch to English",
+    langToggleLabel: "🇫🇷 FR",
   },
   dashboard: {
     statsTitle: "Statistiques",
@@ -33,6 +35,8 @@ export default {
     resetTooltip: "Réinitialiser et archiver la session",
     noStrafeToSave: "Aucun strafe à enregistrer pour le moment.",
     sessionSaved: "Session de {count} strafes sauvegardée avec succès !",
+    perfectInfoTitle: "Les strafes Perfect (écart sous le seuil) ont une durée comptabilisée à 0 ms dans la colonne Tous.",
+    perfectInfoText: "Perfect = 0 ms dans « Tous »",
   },
   metrics: {
     accurateShotsTitle: "Tirs Précis CS2",
@@ -90,6 +94,9 @@ export default {
     earlyRatio: "Early :",
     lateRatio: "Late :",
     perfectRatio: "Perfect :",
+    perfectTitle: "Strafes Parfaits",
+    earlyTitle: "Strafes Early",
+    lateTitle: "Strafes Late",
     exportCsv: "Exporter CSV",
     deleteSession: "Supprimer",
     close: "Fermer",
@@ -136,6 +143,9 @@ export default {
     pressKeyPrompt: "Appuyez sur une touche...",
     unsupportedKey: "Touche non supportée. Utilisez une lettre, un chiffre, une flèche ou Espace.",
     duplicateKey: "La touche « {key} » est déjà utilisée pour une autre direction.",
+    syncErrorBackend: "Erreur de synchronisation avec le backend :",
+    syncErrorKeys: "Touches : {error}",
+    syncErrorThresholds: "Seuils : {error}",
 
     tolerancesSection: "Tolérances de Détection CS2",
     perfectWindow: "Fenêtre Perfect (tolérance 0ms)",

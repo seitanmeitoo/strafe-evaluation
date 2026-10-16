@@ -117,13 +117,13 @@ impl ActiveKeyBindings {
         use inputbot::KeybdKey::*;
 
         let left_key = parse_key_token(&raw.left)
-            .ok_or_else(|| format!("Touche non reconnue pour Gauche : {}", raw.left))?;
+            .ok_or_else(|| format!("Unrecognized key for Left: {}", raw.left))?;
         let right_key = parse_key_token(&raw.right)
-            .ok_or_else(|| format!("Touche non reconnue pour Droite : {}", raw.right))?;
+            .ok_or_else(|| format!("Unrecognized key for Right: {}", raw.right))?;
         let forward_key = parse_key_token(&raw.forward)
-            .ok_or_else(|| format!("Touche non reconnue pour Avancer : {}", raw.forward))?;
+            .ok_or_else(|| format!("Unrecognized key for Forward: {}", raw.forward))?;
         let backward_key = parse_key_token(&raw.backward)
-            .ok_or_else(|| format!("Touche non reconnue pour Reculer : {}", raw.backward))?;
+            .ok_or_else(|| format!("Unrecognized key for Backward: {}", raw.backward))?;
 
         if raw.left.eq_ignore_ascii_case(&raw.right)
             || raw.left.eq_ignore_ascii_case(&raw.forward)
@@ -132,10 +132,10 @@ impl ActiveKeyBindings {
             || raw.right.eq_ignore_ascii_case(&raw.backward)
             || raw.forward.eq_ignore_ascii_case(&raw.backward)
         {
-            return Err("Deux directions ne peuvent pas utiliser la même touche".to_string());
+            return Err("Two directions cannot use the same key".to_string());
         }
 
-        // Alias legacy : flèches associées par défaut aux configurations WASD et ZQSD
+        // Legacy alias: arrow keys associated by default with WASD and ZQSD layouts
         let mut left_keys = vec![left_key];
         if (raw.left.eq_ignore_ascii_case("A") || raw.left.eq_ignore_ascii_case("Q"))
             && !left_keys.contains(&LeftKey)

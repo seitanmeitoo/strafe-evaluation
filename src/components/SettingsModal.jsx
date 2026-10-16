@@ -451,7 +451,7 @@ export default function SettingsModal(props) {
               </Show>
             </div>
 
-            {/* Mode Overlay HUD In-Game */}
+            {/* In-Game Overlay HUD Mode */}
             <div className="border-t border-slate-700/60 pt-4 space-y-3">
               <div className="flex justify-between items-center">
                 <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
@@ -539,7 +539,7 @@ export default function SettingsModal(props) {
                   className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
                   onClick={() => applyPreset("arrows")}
                 >
-                  {t("settings.presetArrows") || "Flèches"}
+                  {t("settings.presetArrows")}
                 </button>
                 <button
                   type="button"

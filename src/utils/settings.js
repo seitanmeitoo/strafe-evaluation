@@ -8,7 +8,7 @@ export const PRESETS = {
     keys: { left: "Q", right: "D", forward: "Z", backward: "S" },
   },
   arrows: {
-    name: "Flèches (← ↑ → ↓)",
+    name: "Arrows (← ↑ → ↓)",
     keys: {
       left: "ArrowLeft",
       right: "ArrowRight",
@@ -32,28 +32,28 @@ export const COLORBLIND_PALETTES = {
   },
   deuteranopia: {
     id: "deuteranopia",
-    name: "Deutéranopie",
+    name: "Deuteranopia",
     early: "#2563eb",   // Cobalt Blue
     late: "#f59e0b",    // Amber Gold
     perfect: "#c084fc", // Bright Purple / Violet
   },
   protanopia: {
     id: "protanopia",
-    name: "Protanopie",
+    name: "Protanopia",
     early: "#1d4ed8",   // Deep Blue
     late: "#eab308",    // Bright Yellow
     perfect: "#f43f5e", // Magenta / Rose
   },
   tritanopia: {
     id: "tritanopia",
-    name: "Tritanopie",
+    name: "Tritanopia",
     early: "#06b6d4",   // Cyan / Teal
     late: "#ef4444",    // Bright Red
     perfect: "#10b981", // Emerald
   },
   highContrast: {
     id: "highContrast",
-    name: "Contraste Élevé",
+    name: "High contrast",
     early: "#38bdf8",   // Sky
     late: "#f97316",    // Bright Orange
     perfect: "#ffffff", // Pure White
