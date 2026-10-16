@@ -8,6 +8,7 @@ import StrafeHistoryBar from "./components/StrafeHistoryBar";
 import Cs2MetricsCard from "./components/Cs2MetricsCard";
 import SettingsModal from "./components/SettingsModal";
 import SessionsModal from "./components/SessionsModal";
+import SessionSummaryModal from "./components/SessionSummaryModal";
 import { LockIcon } from "./components/Icons";
 import { getCs2Metrics } from "./utils/cs2Physics";
 import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
@@ -27,13 +28,17 @@ export default function App() {
   const [isOverlayOpen, setIsOverlayOpen] = createSignal(false);
   const [isOverlayLocked, setIsOverlayLocked] = createSignal(false);
   const [isCurrentSessionSaved, setIsCurrentSessionSaved] = createSignal(false);
+  const [lastSavedSession, setLastSavedSession] = createSignal(null);
+  const [summarySession, setSummarySession] = createSignal(null);
 
   function resetStrafes() {
     const list = totalStrafes();
     if (list.length >= 3 && !isCurrentSessionSaved()) {
-      saveSessionSnapshot(list);
+      const saved = saveSessionSnapshot(list);
+      if (saved) setSummarySession(saved);
     }
     setIsCurrentSessionSaved(false);
+    setLastSavedSession(null);
     setTotalStrafes([]);
     emit("strafe-reset", {}).catch(() => {});
   }
@@ -44,14 +49,15 @@ export default function App() {
       alert(t("dashboard.noStrafeToSave"));
       return;
     }
-    if (isCurrentSessionSaved()) {
-      alert(t("dashboard.sessionSaved", { count: list.length }));
+    if (isCurrentSessionSaved() && lastSavedSession()) {
+      setSummarySession(lastSavedSession());
       return;
     }
     const saved = saveSessionSnapshot(list);
     if (saved) {
       setIsCurrentSessionSaved(true);
-      alert(t("dashboard.sessionSaved", { count: saved.totalStrafes }));
+      setLastSavedSession(saved);
+      setSummarySession(saved);
     }
   }
 
@@ -410,6 +416,9 @@ export default function App() {
         isOpen={isSessionsOpen()}
         onClose={() => setIsSessionsOpen(false)}
       />
+
+      {/* End-of-session summary */}
+      <SessionSummaryModal session={summarySession()} onClose={() => setSummarySession(null)} />
     </div>
   );
 }

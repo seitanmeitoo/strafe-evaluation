@@ -1,6 +1,7 @@
 import { getStats } from "./stats";
 import { getCs2Metrics } from "./cs2Physics";
 import { analyzeSession } from "./analysis";
+import { buildFeedback } from "./feedback";
 
 const SESSIONS_STORAGE_KEY = "strafe_evaluation_sessions";
 
@@ -63,6 +64,8 @@ export function saveSessionSnapshot(strafes) {
         return last;
       }
     }
+    // Rule-based summary, compared with the session saved just before this one.
+    session.feedback = buildFeedback(session, sessions[0] || null);
     const updated = [session, ...sessions].slice(0, 100); // Keep last 100 sessions
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
     return session;
