@@ -6,7 +6,7 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "PatrikZeros-Strafe-Evaluation",
+    "productName": "Strafe-Evolution",
     "version": "1.2.0"
   },
   "tauri": {
@@ -23,7 +23,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "PatrikZero's Strafe Evaluation",
+        "title": "Strafe Evolution",
         "width": 800,
         "height": 620,
         "resizable": false
@@ -31,7 +31,7 @@
       {
         "label": "overlay",
         "url": "index.html?overlay=true",
-        "title": "Strafe Overlay",
+        "title": "Strafe Evolution Overlay",
         "width": 270,
         "height": 135,
         "resizable": false,

@@ -1,8 +1,8 @@
 [package]
 name = "strafe-eval"
 version = "1.2.0"
-description = "Counter-Strafe Evaluation Tool for Counter-Strike 2"
-authors = ["Patrik Zúdel", "Seitan_Meitoo <82282083+seitanmeitoo@users.noreply.github.com>"]
+description = "Counter-strafe training tool for Counter-Strike 2"
+authors = ["Seitan_Meitoo <82282083+seitanmeitoo@users.noreply.github.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

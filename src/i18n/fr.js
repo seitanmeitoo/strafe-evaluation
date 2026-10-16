@@ -1,8 +1,6 @@
 export default {
   app: {
-    title: "PatrikZero's",
-    subtitle: "Strafe Evaluation",
-    engineVersion: "CS2 Engine v1.5",
+    title: "Strafe Evolution",
   },
   header: {
     sessions: "Sessions",
@@ -164,6 +162,10 @@ export default {
     rapidTriggerDesc: "Pour les claviers avec switches magnétiques (Wooting, Huntsman V3, Apex Pro). La désactuation à 0.1mm permet des timings ultra-serrés.",
     rapidTriggerPresetBtn: "⚡ Appliquer le Preset Compétitif Rapid Trigger",
     rapidTriggerApplied: "Preset Rapid Trigger appliqué : Perfect = 1.0ms, Early max = 10ms, Late max = 12ms",
+
+    aboutTitle: "À propos",
+    aboutText: "Strafe Evolution est basé sur strafe-evaluation de Patrik Žúdel, distribué sous licence GPL-3.0.",
+    aboutLink: "Voir le projet d'origine",
   },
   visualizer: {
     simulateEarly: "Early + Tir",
@@ -184,7 +186,7 @@ export default {
     no: "Non",
   },
   overlayApp: {
-    dragHandle: "CS2 HUD",
+    dragHandle: "Strafe Evolution",
     dragTooltip: "Glisser pour déplacer l'overlay sur l'écran",
     streakTooltip: "Série de strafes Perfect consécutifs",
     opacityTooltip: "Changer l'opacité",

@@ -336,14 +336,8 @@ export default function App() {
 
         {/* Center: Title */}
         <div className="flex justify-center items-center select-none pointer-events-none">
-          <h1 className="mr-3 drop-shadow-lg text-2xl font-bold text-center text-slate-200 text-stroke italic">
-            {t("app.title")}
-          </h1>
           <h1 className="text-2xl font-bold text-center tracking-wide">
-            {t("app.subtitle")}{" "}
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-sky-500 text-white ml-2">
-              {t("app.engineVersion")}
-            </span>
+            {t("app.title")}
           </h1>
         </div>
 

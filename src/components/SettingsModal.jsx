@@ -11,6 +11,7 @@ import {
   STRAFE_SYMBOLS,
 } from "../utils/settings";
 import { playStrafeSound } from "../utils/audio";
+import { open } from "@tauri-apps/api/shell";
 import { t, setLanguage } from "../i18n";
 
 export default function SettingsModal(props) {
@@ -809,6 +810,29 @@ export default function SettingsModal(props) {
                   </p>
                 </Show>
               </div>
+            </div>
+
+            {/* About Section */}
+            <div className="border-t border-slate-700/60 pt-4 space-y-2">
+              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
+                {t("settings.aboutTitle")}
+              </label>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                {t("settings.aboutText")}
+              </p>
+              <button
+                type="button"
+                className="text-xs text-sky-400 hover:text-sky-300 underline cursor-pointer transition-colors"
+                onClick={async () => {
+                  try {
+                    await open("https://github.com/patrikzudel/strafe-evaluation");
+                  } catch (e) {
+                    console.error("Failed to open original project URL:", e);
+                  }
+                }}
+              >
+                {t("settings.aboutLink")}
+              </button>
             </div>
           </div>
 
