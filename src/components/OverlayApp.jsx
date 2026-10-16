@@ -250,8 +250,8 @@ export default function OverlayApp() {
             className="flex items-center gap-1.5 cursor-move font-semibold text-[11px] text-slate-400 hover:text-slate-200 tracking-wide select-none"
             title={t("overlayApp.dragTooltip")}
           >
-            <span className="text-slate-500 font-mono">⋮⋮</span>
-            <span>{t("overlayApp.dragHandle")}</span>
+            <span className="text-slate-500 font-mono pointer-events-none">⋮⋮</span>
+            <span className="pointer-events-none">{t("overlayApp.dragHandle")}</span>
           </div>
 
           {/* Streak Badge */}
