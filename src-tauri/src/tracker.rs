@@ -253,18 +253,22 @@ pub fn handle_key_presses(
     if is_left_down && !state.left_pressed {
         state.left_pressed = true;
         state.left_pressed_time = Some(SystemTime::now());
+        state.left_released_time = None;
         let _ = handle.emit_all("a-pressed", ());
 
-        if let Some(prev) = state.right_released_time.take() {
-            if let Ok(elapsed) = prev.elapsed() {
-                eval_understrafe(
-                    elapsed.as_micros(),
-                    state.last_right_movement_duration,
-                    "RightToLeft",
-                    is_diagonal,
-                    game_state,
-                    handle,
-                );
+        let prev = state.right_released_time.take();
+        if !is_right_down {
+            if let Some(prev) = prev {
+                if let Ok(elapsed) = prev.elapsed() {
+                    eval_understrafe(
+                        elapsed.as_micros(),
+                        state.last_right_movement_duration,
+                        "RightToLeft",
+                        is_diagonal,
+                        game_state,
+                        handle,
+                    );
+                }
             }
         }
     }
@@ -272,18 +276,22 @@ pub fn handle_key_presses(
     if is_right_down && !state.right_pressed {
         state.right_pressed = true;
         state.right_pressed_time = Some(SystemTime::now());
+        state.right_released_time = None;
         let _ = handle.emit_all("d-pressed", ());
 
-        if let Some(prev) = state.left_released_time.take() {
-            if let Ok(elapsed) = prev.elapsed() {
-                eval_understrafe(
-                    elapsed.as_micros(),
-                    state.last_left_movement_duration,
-                    "LeftToRight",
-                    is_diagonal,
-                    game_state,
-                    handle,
-                );
+        let prev = state.left_released_time.take();
+        if !is_left_down {
+            if let Some(prev) = prev {
+                if let Ok(elapsed) = prev.elapsed() {
+                    eval_understrafe(
+                        elapsed.as_micros(),
+                        state.last_left_movement_duration,
+                        "LeftToRight",
+                        is_diagonal,
+                        game_state,
+                        handle,
+                    );
+                }
             }
         }
     }
@@ -363,6 +371,8 @@ pub fn handle_overlap_eval(
 
     if (!state.left_pressed || !state.right_pressed) && state.both_pressed_time.is_some() {
         if let Some(start) = state.both_pressed_time.take() {
+            state.left_released_time = None;
+            state.right_released_time = None;
             if let Ok(elapsed) = start.elapsed() {
                 let time_passed = elapsed.as_micros();
                 let max_eval = game_state.max_eval_micros.load(Ordering::Relaxed) as u128;
