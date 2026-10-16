@@ -13,7 +13,7 @@ import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
 import { playStrafeSound } from "./utils/audio";
 import { exportStrafesToCsv } from "./utils/exportCsv";
 import { saveSessionSnapshot } from "./utils/sessions";
-import { t, language, setLanguage } from "./i18n";
+import { t } from "./i18n";
 import "./App.css";
 
 export default function App() {
@@ -114,24 +114,12 @@ export default function App() {
 
     setSettings(newSettings);
     saveSettings(newSettings);
-    if (newSettings.language) {
-      setLanguage(newSettings.language);
-    }
     emit("settings-changed", newSettings).catch(() => {});
   }
 
   function toggleTheme() {
     const nextTheme = settings().theme === "light" ? "dark" : "light";
     const updated = { ...settings(), theme: nextTheme };
-    setSettings(updated);
-    saveSettings(updated);
-    emit("settings-changed", updated).catch(() => {});
-  }
-
-  function toggleLanguage() {
-    const nextLang = language() === "fr" ? "en" : "fr";
-    setLanguage(nextLang);
-    const updated = { ...settings(), language: nextLang };
     setSettings(updated);
     saveSettings(updated);
     emit("settings-changed", updated).catch(() => {});
@@ -178,10 +166,6 @@ export default function App() {
       );
       let current = settings();
 
-      if (current.language) {
-        setLanguage(current.language);
-      }
-
       // 1. Register listeners FIRST so no event is missed during initialization
       unlistenStrafe = await listen("strafe", (event) => {
         const payload = event.payload;
@@ -207,9 +191,6 @@ export default function App() {
       unlistenSettings = await listen("settings-changed", (e) => {
         if (e.payload) {
           setSettings(e.payload);
-          if (e.payload.language && e.payload.language !== language()) {
-            setLanguage(e.payload.language);
-          }
         }
       });
 
@@ -290,7 +271,7 @@ export default function App() {
             : "bg-white/80 border-slate-200"
         }`}
       >
-        {/* Left header actions: Sessions history, Theme toggle & Language switcher */}
+        {/* Left header actions: Sessions history & Theme toggle */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -317,20 +298,6 @@ export default function App() {
             title={isDark() ? t("header.themeLight") : t("header.themeDark")}
           >
             {isDark() ? "🌙" : "☀️"}
-          </button>
-
-          {/* Quick Language switcher */}
-          <button
-            type="button"
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-              isDark()
-                ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-                : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300"
-            }`}
-            onClick={toggleLanguage}
-            title={t("header.langToggleTitle")}
-          >
-            {t("header.langToggleLabel")}
           </button>
         </div>
 

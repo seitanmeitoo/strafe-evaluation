@@ -97,7 +97,6 @@ export const DEFAULT_SETTINGS = {
     lateTargetMs: 20,
   },
   theme: "dark",
-  language: "fr",
   colorblindMode: "default",
   audio: {
     enabled: true,
@@ -153,7 +152,6 @@ export function cloneSettings(s) {
     maxStrafeMs: s?.maxStrafeMs ?? DEFAULT_SETTINGS.maxStrafeMs,
     visualGoals: { ...(s?.visualGoals || DEFAULT_SETTINGS.visualGoals) },
     theme: s?.theme || DEFAULT_SETTINGS.theme,
-    language: s?.language || DEFAULT_SETTINGS.language,
     colorblindMode: s?.colorblindMode || DEFAULT_SETTINGS.colorblindMode,
     audio: { ...(s?.audio || DEFAULT_SETTINGS.audio) },
     overlay: { ...(s?.overlay || DEFAULT_SETTINGS.overlay) },
@@ -244,7 +242,6 @@ export function loadSettings() {
         ),
       },
       theme: parsed.theme === "light" ? "light" : "dark",
-      language: parsed.language === "en" ? "en" : "fr",
       colorblindMode: COLORBLIND_PALETTES[parsed.colorblindMode]
         ? parsed.colorblindMode
         : DEFAULT_SETTINGS.colorblindMode,

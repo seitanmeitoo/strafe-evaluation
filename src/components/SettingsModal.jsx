@@ -12,7 +12,7 @@ import {
 } from "../utils/settings";
 import { playStrafeSound } from "../utils/audio";
 import { open } from "@tauri-apps/api/shell";
-import { t, setLanguage } from "../i18n";
+import { t } from "../i18n";
 
 export default function SettingsModal(props) {
   const [keys, setKeys] = createSignal({ ...DEFAULT_SETTINGS.keys });
@@ -32,7 +32,6 @@ export default function SettingsModal(props) {
     DEFAULT_SETTINGS.visualGoals.lateTargetMs
   );
   const [theme, setTheme] = createSignal(DEFAULT_SETTINGS.theme);
-  const [lang, setLang] = createSignal(DEFAULT_SETTINGS.language);
   const [colorblindMode, setColorblindMode] = createSignal(
     DEFAULT_SETTINGS.colorblindMode
   );
@@ -51,10 +50,8 @@ export default function SettingsModal(props) {
   const [activeRebind, setActiveRebind] = createSignal(null);
   const [rebindError, setRebindError] = createSignal(null);
   const [rapidTriggerNotice, setRapidTriggerNotice] = createSignal(false);
-  let initialLanguage = "fr";
 
   function handleCancel() {
-    setLanguage(initialLanguage);
     setActiveRebind(null);
     setRebindError(null);
     props.onClose();
@@ -64,7 +61,6 @@ export default function SettingsModal(props) {
   createEffect(() => {
     if (props.isOpen && props.currentSettings) {
       const s = props.currentSettings;
-      initialLanguage = s.language || "fr";
       setKeys({ ...s.keys });
       setPerfectThresholdMs(s.perfectThresholdMs);
       setMaxStrafeMs(s.maxStrafeMs);
@@ -72,7 +68,6 @@ export default function SettingsModal(props) {
       setEarlyTargetMs(s.visualGoals?.earlyTargetMs ?? 15);
       setLateTargetMs(s.visualGoals?.lateTargetMs ?? 20);
       setTheme(s.theme || "dark");
-      setLang(s.language || "fr");
       setColorblindMode(s.colorblindMode || "default");
       setAudioEnabled(
         typeof s.audio?.enabled === "boolean" ? s.audio.enabled : true
@@ -160,7 +155,6 @@ export default function SettingsModal(props) {
     setEarlyTargetMs(DEFAULT_SETTINGS.visualGoals.earlyTargetMs);
     setLateTargetMs(DEFAULT_SETTINGS.visualGoals.lateTargetMs);
     setTheme(DEFAULT_SETTINGS.theme);
-    setLang(DEFAULT_SETTINGS.language);
     setColorblindMode(DEFAULT_SETTINGS.colorblindMode);
     setAudioEnabled(DEFAULT_SETTINGS.audio.enabled);
     setAudioVolume(DEFAULT_SETTINGS.audio.volume);
@@ -171,9 +165,6 @@ export default function SettingsModal(props) {
   }
 
   function handleSave() {
-    const newLang = lang();
-    setLanguage(newLang);
-
     props.onSave({
       keys: keys(),
       perfectThresholdMs: clampNumber(
@@ -204,7 +195,6 @@ export default function SettingsModal(props) {
         ),
       },
       theme: theme(),
-      language: newLang,
       colorblindMode: colorblindMode(),
       audio: {
         enabled: audioEnabled(),
@@ -263,74 +253,34 @@ export default function SettingsModal(props) {
 
           {/* Modal body */}
           <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(92vh-130px)] text-sm">
-            {/* Language & Theme Section */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Language */}
-              <div>
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block mb-2">
-                  {t("settings.languageSection")}
-                </label>
-                <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 text-xs">
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      lang() === "fr"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => {
-                      setLang("fr");
-                      setLanguage("fr");
-                    }}
-                  >
-                    🇫🇷 FR
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      lang() === "en"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => {
-                      setLang("en");
-                      setLanguage("en");
-                    }}
-                  >
-                    🇬🇧 EN
-                  </button>
-                </div>
-              </div>
-
-              {/* Theme */}
-              <div>
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block mb-2">
-                  {t("settings.themeSection")}
-                </label>
-                <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 text-xs">
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      theme() === "dark"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => setTheme("dark")}
-                  >
-                    {t("settings.themeDark")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      theme() === "light"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => setTheme("light")}
-                  >
-                    {t("settings.themeLight")}
-                  </button>
-                </div>
+            {/* Theme Section */}
+            <div>
+              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block mb-2">
+                {t("settings.themeSection")}
+              </label>
+              <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 text-xs max-w-xs">
+                <button
+                  type="button"
+                  className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    theme() === "dark"
+                      ? "bg-sky-500 text-white font-bold shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  onClick={() => setTheme("dark")}
+                >
+                  {t("settings.themeDark")}
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    theme() === "light"
+                      ? "bg-sky-500 text-white font-bold shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  onClick={() => setTheme("light")}
+                >
+                  {t("settings.themeLight")}
+                </button>
               </div>
             </div>
 

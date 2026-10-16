@@ -1,6 +1,6 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { loadSessions, deleteSession, clearAllSessions } from "../utils/sessions";
-import { t, language } from "../i18n";
+import { t } from "../i18n";
 
 export default function SessionsModal(props) {
   const [sessions, setSessions] = createSignal([]);
@@ -35,8 +35,7 @@ export default function SessionsModal(props) {
   function formatDate(iso) {
     try {
       const d = new Date(iso);
-      const locale = language() === "en" ? "en-US" : "fr-FR";
-      return d.toLocaleDateString(locale, {
+      return d.toLocaleDateString("en-US", {
         day: "numeric",
         month: "short",
         hour: "2-digit",

@@ -5,7 +5,7 @@ import { appWindow, PhysicalPosition, availableMonitors } from "@tauri-apps/api/
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
 import { playStrafeSound } from "../utils/audio";
 import { loadSettings, saveSettings, getStrafeColors, STRAFE_SYMBOLS, formatKeyDisplay } from "../utils/settings";
-import { t, setLanguage } from "../i18n";
+import { t } from "../i18n";
 import "../App.css";
 
 const OPACITY_STEPS = [0.95, 0.8, 0.6, 0.4];
@@ -83,9 +83,6 @@ export default function OverlayApp() {
 
     const currentSettings = loadSettings();
     setSettings(currentSettings);
-    if (currentSettings.language) {
-      setLanguage(currentSettings.language);
-    }
 
     // Restore saved window position with off-screen boundary check
     const restorePosition = async () => {
@@ -196,9 +193,6 @@ export default function OverlayApp() {
       unlistenSettings = await listen("settings-changed", (event) => {
         const newSettings = event.payload || loadSettings();
         setSettings(newSettings);
-        if (newSettings.language) {
-          setLanguage(newSettings.language);
-        }
       });
 
       unlistenReset = await listen("strafe-reset", () => {

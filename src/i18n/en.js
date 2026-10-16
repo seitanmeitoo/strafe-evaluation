@@ -14,8 +14,6 @@ export default {
     passThrough: "Pass-through",
     draggable: "Move",
     settings: "Settings & Tolerances",
-    langToggleTitle: "Passer en Français",
-    langToggleLabel: "🇬🇧 EN",
   },
   dashboard: {
     statsTitle: "Statistics",
@@ -106,7 +104,6 @@ export default {
     cancelBtn: "Cancel",
     saveBtn: "Save",
 
-    languageSection: "Language",
     themeSection: "Visual Theme",
     themeDark: "🌙 Dark",
     themeLight: "☀️ Light",
