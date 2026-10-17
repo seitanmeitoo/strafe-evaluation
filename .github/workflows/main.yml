@@ -14,6 +14,33 @@ on:
 # CI compilation and release workflow (Windows target)
 
 jobs:
+  checks:
+    # Unit tests and Rust lints on pull requests and the dev branch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - name: unit tests
+        run: npm test
+
+      - name: clippy
+        run: cargo clippy -- -D warnings
+        working-directory: src-tauri
+
   publish-tauri:
     permissions:
       contents: write
