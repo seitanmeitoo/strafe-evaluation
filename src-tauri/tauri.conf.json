@@ -19,6 +19,7 @@
       "window": {
         "all": false,
         "setPosition": true,
+        "setSize": true,
         "startDragging": true
       }
     },
