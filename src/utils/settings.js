@@ -1,4 +1,5 @@
 import { DRILL_MODES, mergeDrillConfig } from "./drills";
+import { DEFAULT_RANKS, normalizeRanks } from "./ranks";
 
 export const PRESETS = {
   qwerty: {
@@ -107,6 +108,7 @@ export const DEFAULT_SETTINGS = {
     autoStart: false,
   },
   drills: { defaultMode: "normal", ...mergeDrillConfig() },
+  ranks: DEFAULT_RANKS.map((r) => ({ ...r })),
 };
 
 export const SETTINGS_BOUNDS = {
@@ -157,6 +159,7 @@ export function cloneSettings(s) {
     audio: { ...(s?.audio || DEFAULT_SETTINGS.audio) },
     overlay: { ...(s?.overlay || DEFAULT_SETTINGS.overlay) },
     drills: loadDrillSettings(s?.drills),
+    ranks: normalizeRanks(s?.ranks),
   };
 }
 
@@ -278,6 +281,7 @@ export function loadSettings() {
           : DEFAULT_SETTINGS.overlay.autoStart,
       },
       drills: loadDrillSettings(parsed.drills),
+      ranks: normalizeRanks(parsed.ranks),
     };
   } catch (err) {
     console.error("Failed to load settings from storage:", err);

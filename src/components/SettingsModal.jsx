@@ -16,6 +16,7 @@ import { playStrafeSound } from "../utils/audio";
 import { open } from "@tauri-apps/api/shell";
 import { t } from "../i18n";
 import { CloseIcon } from "./Icons";
+import { DEFAULT_RANKS, normalizeRanks } from "../utils/ranks";
 
 // Shared style strings (same look as the buttons of the main window).
 const btn =
@@ -78,6 +79,11 @@ export default function SettingsModal(props) {
   const [activeRebind, setActiveRebind] = createSignal(null);
   const [rebindError, setRebindError] = createSignal(null);
   const [rapidTriggerNotice, setRapidTriggerNotice] = createSignal(false);
+  const [ranks, setRanks] = createSignal(DEFAULT_RANKS.map((r) => ({ ...r })));
+
+  function updateRank(index, patch) {
+    setRanks((list) => list.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
 
   function handleCancel() {
     setActiveRebind(null);
@@ -105,6 +111,7 @@ export default function SettingsModal(props) {
         typeof s.overlay?.opacity === "number" ? s.overlay.opacity : 0.85
       );
       setOverlayAutoStart(Boolean(s.overlay?.autoStart));
+      setRanks(normalizeRanks(s.ranks));
       setActiveRebind(null);
       setRebindError(null);
       setRapidTriggerNotice(false);
@@ -176,6 +183,7 @@ export default function SettingsModal(props) {
   }
 
   function handleReset() {
+    setRanks(DEFAULT_RANKS.map((r) => ({ ...r })));
     setKeys({ ...DEFAULT_SETTINGS.keys });
     setPerfectThresholdMs(DEFAULT_SETTINGS.perfectThresholdMs);
     setMaxStrafeMs(DEFAULT_SETTINGS.maxStrafeMs);
@@ -244,6 +252,7 @@ export default function SettingsModal(props) {
         ),
         autoStart: overlayAutoStart(),
       },
+      ranks: normalizeRanks(ranks()),
     });
     props.onClose();
   }
@@ -643,6 +652,47 @@ export default function SettingsModal(props) {
                 <Show when={rapidTriggerNotice()}>
                   <p className="text-[12px] font-semibold">{t("settings.rapidTriggerApplied")}</p>
                 </Show>
+              </div>
+            </div>
+
+            {/* Ranks */}
+            <div className={section}>
+              <div className="flex items-baseline justify-between">
+                <h3 className={sectionTitle}>{t("settings.ranksSection")}</h3>
+                <button
+                  type="button"
+                  className="text-[12px] text-muted hover:text-ink underline underline-offset-4 cursor-pointer"
+                  onClick={() => setRanks(DEFAULT_RANKS.map((r) => ({ ...r })))}
+                >
+                  {t("settings.ranksReset")}
+                </button>
+              </div>
+              <p className={desc}>{t("settings.ranksDesc")}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <For each={ranks()}>
+                  {(rank, i) => (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        maxLength={24}
+                        className="flex-1 min-w-0 h-7 bg-card border border-line rounded-md px-2 text-[13px] text-ink focus:outline-none focus:border-accent"
+                        value={rank.name}
+                        onChange={(e) => updateRank(i(), { name: e.target.value })}
+                        aria-label={t("settings.rankName")}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className={`${numInput} w-14`}
+                        value={rank.min}
+                        disabled={i() === 0}
+                        onChange={(e) => updateRank(i(), { min: e.target.value })}
+                        aria-label={t("settings.rankMin")}
+                      />
+                    </div>
+                  )}
+                </For>
               </div>
             </div>
 

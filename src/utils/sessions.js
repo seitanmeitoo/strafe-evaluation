@@ -4,6 +4,7 @@ import { analyzeSession } from "./analysis";
 import { buildFeedback } from "./feedback";
 
 const SESSIONS_STORAGE_KEY = "strafe_evaluation_sessions";
+const MAX_SESSIONS = 1000;
 
 export function loadSessions() {
   try {
@@ -66,7 +67,8 @@ export function saveSessionSnapshot(strafes) {
     }
     // Rule-based summary, compared with the session saved just before this one.
     session.feedback = buildFeedback(session, sessions[0] || null);
-    const updated = [session, ...sessions].slice(0, 100); // Keep last 100 sessions
+    // Long history for the progress page; capped to stay well inside the storage quota.
+    const updated = [session, ...sessions].slice(0, MAX_SESSIONS);
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
     return session;
   } catch (e) {

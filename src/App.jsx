@@ -16,7 +16,8 @@ import { getCs2Metrics } from "./utils/cs2Physics";
 import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
 import { playStrafeSound } from "./utils/audio";
 import { exportStrafesToCsv } from "./utils/exportCsv";
-import { saveSessionSnapshot } from "./utils/sessions";
+import { saveSessionSnapshot, loadSessions } from "./utils/sessions";
+import { currentRank } from "./utils/ranks";
 import { createDrillController } from "./utils/drillController";
 import { t } from "./i18n";
 import "./App.css";
@@ -35,12 +36,19 @@ export default function App() {
   const [summarySession, setSummarySession] = createSignal(null);
   const [page, setPage] = createSignal("live"); // "live" | "progress" | "training"
   const drills = createDrillController(settings);
+  // Bumped whenever a session is saved, so the rank is recomputed.
+  const [sessionsVersion, setSessionsVersion] = createSignal(0);
+  const rank = createMemo(() => {
+    sessionsVersion();
+    return currentRank(loadSessions(), settings().ranks);
+  });
 
   function resetStrafes() {
     const list = totalStrafes();
     if (list.length >= 3 && !isCurrentSessionSaved()) {
       const saved = saveSessionSnapshot(list);
       if (saved) setSummarySession(saved);
+      setSessionsVersion((v) => v + 1);
     }
     setIsCurrentSessionSaved(false);
     setLastSavedSession(null);
@@ -63,6 +71,7 @@ export default function App() {
       setIsCurrentSessionSaved(true);
       setLastSavedSession(saved);
       setSummarySession(saved);
+      setSessionsVersion((v) => v + 1);
     }
   }
 
@@ -313,9 +322,13 @@ export default function App() {
     <div className="w-screen h-screen min-w-[800px] min-h-[620px] flex flex-col overflow-hidden bg-surface text-ink">
       {/* Header */}
       <header className="h-[48px] shrink-0 flex items-center gap-2 px-5">
-        <h1 className="text-[21px] font-extrabold tracking-tight select-none mr-auto">
-          {t("app.title")}
-        </h1>
+        <h1 className="text-[21px] font-extrabold tracking-tight select-none">{t("app.title")}</h1>
+        <span
+          className="text-[13px] text-muted select-none mr-auto ml-2 cursor-default"
+          title={rank() ? t("progress.rankScore", { score: rank().score, count: rank().sessions }) : ""}
+        >
+          {rank() ? rank().name : ""}
+        </span>
 
         <button type="button" className={btn} onClick={() => setIsSessionsOpen(true)} title={t("sessions.title")}>
           {t("header.sessions")}
@@ -374,7 +387,7 @@ export default function App() {
       </nav>
 
       <Show when={page() === "progress"}>
-        <ProgressPage />
+        <ProgressPage ranks={settings().ranks} theme={settings().theme} />
       </Show>
 
       <Show when={page() === "training"}>
