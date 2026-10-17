@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, onCleanup, Show, For } from "solid-js";
 import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
 import StatsTable from "./components/StatsTable";
@@ -9,6 +9,8 @@ import Cs2MetricsCard from "./components/Cs2MetricsCard";
 import SettingsModal from "./components/SettingsModal";
 import SessionsModal from "./components/SessionsModal";
 import SessionSummaryModal from "./components/SessionSummaryModal";
+import ProgressPage from "./components/ProgressPage";
+import TrainingPage from "./components/TrainingPage";
 import { LockIcon } from "./components/Icons";
 import { getCs2Metrics } from "./utils/cs2Physics";
 import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
@@ -30,6 +32,7 @@ export default function App() {
   const [isCurrentSessionSaved, setIsCurrentSessionSaved] = createSignal(false);
   const [lastSavedSession, setLastSavedSession] = createSignal(null);
   const [summarySession, setSummarySession] = createSignal(null);
+  const [page, setPage] = createSignal("live"); // "live" | "progress" | "training"
 
   function resetStrafes() {
     const list = totalStrafes();
@@ -272,6 +275,12 @@ export default function App() {
   const btn =
     "h-8 px-3 rounded-md border border-line bg-card text-ink text-[13px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
 
+  const PAGES = [
+    { id: "live", label: "pages.live" },
+    { id: "progress", label: "pages.progress" },
+    { id: "training", label: "pages.training" },
+  ];
+
   const filterBtn = (active) =>
     `cursor-pointer select-none transition-colors ${
       active ? "text-ink font-semibold underline underline-offset-4" : "text-muted hover:text-ink"
@@ -280,7 +289,7 @@ export default function App() {
   return (
     <div className="w-screen h-screen min-w-[800px] min-h-[620px] flex flex-col overflow-hidden bg-surface text-ink">
       {/* Header */}
-      <header className="h-[52px] shrink-0 flex items-center gap-2 px-5">
+      <header className="h-[48px] shrink-0 flex items-center gap-2 px-5">
         <h1 className="text-[21px] font-extrabold tracking-tight select-none mr-auto">
           {t("app.title")}
         </h1>
@@ -325,6 +334,31 @@ export default function App() {
         </button>
       </header>
 
+      {/* Page tabs */}
+      <nav className="h-[30px] shrink-0 flex items-start gap-5 px-5 text-[14px]">
+        <For each={PAGES}>
+          {(p) => (
+            <button
+              type="button"
+              className={filterBtn(page() === p.id)}
+              onClick={() => setPage(p.id)}
+              aria-current={page() === p.id ? "page" : undefined}
+            >
+              {t(p.label)}
+            </button>
+          )}
+        </For>
+      </nav>
+
+      <Show when={page() === "progress"}>
+        <ProgressPage />
+      </Show>
+
+      <Show when={page() === "training"}>
+        <TrainingPage />
+      </Show>
+
+      <Show when={page() === "live"}>
       {/* Main dashboard content */}
       <main className="flex-1 min-h-0 flex gap-3 px-5">
         {/* Left: statistics */}
@@ -402,6 +436,7 @@ export default function App() {
 
       {/* Bottom history strip */}
       <StrafeHistoryBar strafes={filteredStrafes()} colorblindMode={settings().colorblindMode} />
+      </Show>
 
       {/* Settings Modal */}
       <SettingsModal

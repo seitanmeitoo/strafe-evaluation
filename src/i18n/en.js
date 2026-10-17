@@ -16,6 +16,13 @@ export default {
     settings: "Settings & Tolerances",
     settingsLabel: "Settings",
   },
+  pages: {
+    live: "Live",
+    progress: "Progress",
+    training: "Training",
+    progressEmpty: "Your progress over days and weeks will show up here once you have saved a few sessions.",
+    trainingEmpty: "Timed drills, side focus, Perfect streak challenges and warm-up routines will live here.",
+  },
   dashboard: {
     statsTitle: "Statistics",
     filterAll: "All",
