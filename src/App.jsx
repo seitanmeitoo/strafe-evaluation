@@ -17,6 +17,7 @@ import { loadSettings, saveSettings, PRESETS } from "./utils/settings";
 import { playStrafeSound } from "./utils/audio";
 import { exportStrafesToCsv } from "./utils/exportCsv";
 import { saveSessionSnapshot } from "./utils/sessions";
+import { createDrillController } from "./utils/drillController";
 import { t } from "./i18n";
 import "./App.css";
 
@@ -33,6 +34,7 @@ export default function App() {
   const [lastSavedSession, setLastSavedSession] = createSignal(null);
   const [summarySession, setSummarySession] = createSignal(null);
   const [page, setPage] = createSignal("live"); // "live" | "progress" | "training"
+  const drills = createDrillController(settings);
 
   function resetStrafes() {
     const list = totalStrafes();
@@ -174,6 +176,8 @@ export default function App() {
     let unlistenSettings;
     let unlistenOverlayVis;
     let unlistenOverlayLock;
+    let unlistenDrillHotkey;
+    let unlistenDrillRequest;
 
     const setupApp = async () => {
       const hasStoredSettings = Boolean(
@@ -201,7 +205,16 @@ export default function App() {
 
         setTotalStrafes((prev) => [strafe, ...prev]);
         setIsCurrentSessionSaved(false);
+        drills.handleStrafe(strafe);
       });
+
+      unlistenDrillHotkey = await listen("drill-hotkey", (e) => {
+        drills.handleHotkey(e.payload?.action);
+      });
+
+      // The overlay asks for the drill state when it opens.
+      unlistenDrillRequest = await listen("drill-state-request", () => drills.broadcast());
+      drills.broadcast();
 
       unlistenSettings = await listen("settings-changed", (e) => {
         if (e.payload) {
@@ -269,6 +282,9 @@ export default function App() {
       if (typeof unlistenSettings === "function") unlistenSettings();
       if (typeof unlistenOverlayVis === "function") unlistenOverlayVis();
       if (typeof unlistenOverlayLock === "function") unlistenOverlayLock();
+      if (typeof unlistenDrillHotkey === "function") unlistenDrillHotkey();
+      if (typeof unlistenDrillRequest === "function") unlistenDrillRequest();
+      drills.dispose();
     });
   });
 
@@ -355,7 +371,7 @@ export default function App() {
       </Show>
 
       <Show when={page() === "training"}>
-        <TrainingPage />
+        <TrainingPage drills={drills} />
       </Show>
 
       <Show when={page() === "live"}>

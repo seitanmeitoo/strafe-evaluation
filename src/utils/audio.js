@@ -17,6 +17,44 @@ function getAudioContext() {
   return audioCtx;
 }
 
+// Short note sequences for drill events: [frequency in Hz, start in s, length in s].
+const DRILL_SOUNDS = {
+  start: [[659.25, 0, 0.08], [880, 0.09, 0.1]],
+  phase: [[523.25, 0, 0.08], [783.99, 0.09, 0.12]],
+  target: [[523.25, 0, 0.08], [659.25, 0.09, 0.08], [783.99, 0.18, 0.14]],
+  end: [[783.99, 0, 0.1], [523.25, 0.11, 0.16]],
+  record: [[523.25, 0, 0.08], [659.25, 0.09, 0.08], [783.99, 0.18, 0.08], [1046.5, 0.27, 0.18]],
+};
+
+export function playDrillSound(kind, volume = 0.5) {
+  if (volume <= 0) return;
+  const notes = DRILL_SOUNDS[kind];
+  const ctx = getAudioContext();
+  if (!ctx || !notes) return;
+
+  try {
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(Math.min(1, Math.max(0, volume)), now);
+    master.connect(ctx.destination);
+
+    for (const [freq, start, length] of notes) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + start);
+      gain.gain.setValueAtTime(0.25, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + start + length);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(now + start);
+      osc.stop(now + start + length);
+    }
+  } catch (err) {
+    // Web Audio may be blocked; drills work without sound.
+  }
+}
+
 export function playStrafeSound(type, volume = 0.5) {
   if (volume <= 0) return;
 

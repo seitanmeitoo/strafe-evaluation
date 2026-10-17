@@ -6,6 +6,7 @@ import {
   RAPID_TRIGGER_PRESET,
   SETTINGS_BOUNDS,
   clampNumber,
+  cloneSettings,
   normalizeKey,
   formatKeyDisplay,
   STRAFE_SYMBOLS,
@@ -193,6 +194,8 @@ export default function SettingsModal(props) {
 
   function handleSave() {
     props.onSave({
+      // Keep the settings this modal does not edit (drill configuration, ...).
+      ...cloneSettings(props.currentSettings),
       keys: keys(),
       perfectThresholdMs: clampNumber(
         perfectThresholdMs(),

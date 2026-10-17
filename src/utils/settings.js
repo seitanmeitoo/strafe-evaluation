@@ -1,3 +1,5 @@
+import { DRILL_MODES, mergeDrillConfig } from "./drills";
+
 export const PRESETS = {
   qwerty: {
     name: "QWERTY (WASD)",
@@ -104,6 +106,7 @@ export const DEFAULT_SETTINGS = {
     opacity: 0.85,
     autoStart: false,
   },
+  drills: { defaultMode: "normal", ...mergeDrillConfig() },
 };
 
 export const SETTINGS_BOUNDS = {
@@ -153,6 +156,15 @@ export function cloneSettings(s) {
     colorblindMode: s?.colorblindMode || DEFAULT_SETTINGS.colorblindMode,
     audio: { ...(s?.audio || DEFAULT_SETTINGS.audio) },
     overlay: { ...(s?.overlay || DEFAULT_SETTINGS.overlay) },
+    drills: loadDrillSettings(s?.drills),
+  };
+}
+
+/** Drill settings with every field present (defaults filled in). */
+export function loadDrillSettings(saved) {
+  return {
+    defaultMode: DRILL_MODES.includes(saved?.defaultMode) ? saved.defaultMode : "normal",
+    ...mergeDrillConfig(saved),
   };
 }
 
@@ -265,6 +277,7 @@ export function loadSettings() {
           ? parsed.overlay.autoStart
           : DEFAULT_SETTINGS.overlay.autoStart,
       },
+      drills: loadDrillSettings(parsed.drills),
     };
   } catch (err) {
     console.error("Failed to load settings from storage:", err);

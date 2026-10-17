@@ -1,12 +1,13 @@
-import { createSignal, createMemo, createEffect, onMount, onCleanup } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, onCleanup, Show } from "solid-js";
 import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow, PhysicalPosition, availableMonitors } from "@tauri-apps/api/window";
+import { appWindow, PhysicalPosition, LogicalSize, availableMonitors } from "@tauri-apps/api/window";
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
 import { playStrafeSound } from "../utils/audio";
 import { loadSettings, saveSettings, getStrafeColors, STRAFE_SYMBOLS, formatKeyDisplay } from "../utils/settings";
 import { t } from "../i18n";
 import { CloseIcon, LockIcon } from "./Icons";
+import DrillPanel from "./DrillPanel";
 import "../App.css";
 
 const OPACITY_STEPS = [0.95, 0.8, 0.6, 0.4];
@@ -19,6 +20,8 @@ export default function OverlayApp() {
   const [isLocked, setIsLocked] = createSignal(false);
   const [isVisible, setIsVisible] = createSignal(true);
   const [settings, setSettings] = createSignal(loadSettings());
+  const [drillView, setDrillView] = createSignal({ mode: "normal", status: "idle", progress: null, result: null });
+  const isDrillMode = () => drillView().mode !== "normal";
 
   const opacity = () => settings().overlay?.opacity ?? 0.85;
   const colors = createMemo(() => getStrafeColors(settings().colorblindMode));
@@ -29,6 +32,12 @@ export default function OverlayApp() {
     type === "Perfect" ? colors().perfect : type === "Early" ? colors().early : colors().late;
   const typeSymbol = (type) =>
     type === "Perfect" ? STRAFE_SYMBOLS.perfect : type === "Early" ? STRAFE_SYMBOLS.early : STRAFE_SYMBOLS.late;
+
+  // Taller window while a drill mode is selected, to fit the drill panel.
+  createEffect(() => {
+    const height = isDrillMode() ? 180 : 135;
+    appWindow.setSize(new LogicalSize(270, height)).catch((e) => console.warn("Could not resize overlay:", e));
+  });
 
   // Follow the app theme (each window has its own <html>).
   createEffect(() => {
@@ -153,6 +162,7 @@ export default function OverlayApp() {
     let unlistenSettings;
     let unlistenReset;
     let unlistenMove;
+    let unlistenDrill;
     let moveTimeout = null;
 
     const setupListeners = async () => {
@@ -210,6 +220,12 @@ export default function OverlayApp() {
         handleReset();
       });
 
+      // Drills run in the main window; the overlay only shows their state.
+      unlistenDrill = await listen("drill-state", (event) => {
+        if (event.payload) setDrillView(event.payload);
+      });
+      emit("drill-state-request", {}).catch(() => {});
+
       // Debounced position saving (300ms)
       unlistenMove = await appWindow.onMoved(({ payload: position }) => {
         if (moveTimeout) clearTimeout(moveTimeout);
@@ -236,6 +252,7 @@ export default function OverlayApp() {
       if (typeof unlistenSettings === "function") unlistenSettings();
       if (typeof unlistenReset === "function") unlistenReset();
       if (typeof unlistenMove === "function") unlistenMove();
+      if (typeof unlistenDrill === "function") unlistenDrill();
       document.documentElement.classList.remove("overlay-mode");
       document.body.classList.remove("overlay-mode");
     });
@@ -246,7 +263,7 @@ export default function OverlayApp() {
 
   return (
     <div
-      className="w-[270px] h-[135px] select-none p-1.5 overflow-hidden"
+      className={`w-[270px] select-none p-1.5 overflow-hidden ${isDrillMode() ? "h-[180px]" : "h-[135px]"}`}
       style={{ opacity: opacity() }}
     >
       <div
@@ -288,6 +305,11 @@ export default function OverlayApp() {
             <CloseIcon size={11} />
           </button>
         </div>
+
+        {/* Drill mode, progress or result */}
+        <Show when={isDrillMode()}>
+          <DrillPanel view={drillView()} leftKey={leftKey()} rightKey={rightKey()} />
+        </Show>
 
         {/* Last strafe */}
         {lastStrafe() ? (
