@@ -1,6 +1,7 @@
-import { For, Show } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
 import { t } from "../i18n";
 import { CloseIcon } from "./Icons";
+import { saveSessionImage } from "../utils/shareImage";
 
 const btn =
   "h-8 px-3 rounded-md border border-line bg-card text-ink text-[13px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
@@ -30,7 +31,38 @@ function Items(props) {
 
 /** Rule-based summary of one saved session (props.session), shown in a modal. */
 export default function SessionSummaryModal(props) {
+  const [isSaving, setIsSaving] = createSignal(false);
+  const [statusMessage, setStatusMessage] = createSignal(null);
+  const [statusError, setStatusError] = createSignal(false);
+
+  createEffect(() => {
+    props.session;
+    setIsSaving(false);
+    setStatusMessage(null);
+    setStatusError(false);
+  });
+
   const feedback = () => props.session?.feedback;
+  const canSave = () => (props.session?.totalStrafes || 0) > 0;
+
+  async function handleSaveImage() {
+    if (!props.session || isSaving()) return;
+    setIsSaving(true);
+    setStatusMessage(null);
+    setStatusError(false);
+    try {
+      const path = await saveSessionImage(props.session);
+      setStatusError(false);
+      setStatusMessage(t("feedback.imageSaved", { path }));
+    } catch (err) {
+      console.error(err);
+      setStatusError(true);
+      const errorText = err?.message || String(err);
+      setStatusMessage(t("feedback.imageSaveError", { error: errorText }));
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   const Figure = (p) => (
     <div className="flex flex-col">
@@ -92,7 +124,23 @@ export default function SessionSummaryModal(props) {
             </Show>
           </div>
 
-          <div className="h-14 shrink-0 px-5 border-t border-line flex justify-end items-center">
+          <Show when={statusMessage()}>
+            <div className={`px-5 py-2 border-t border-line text-[12px] break-all ${statusError() ? "text-ink font-semibold" : "text-muted"}`}>
+              {statusMessage()}
+            </div>
+          </Show>
+
+          <div className="h-14 shrink-0 px-5 border-t border-line flex justify-between items-center">
+            <Show when={canSave()} fallback={<div />}>
+              <button
+                type="button"
+                className={btn}
+                disabled={isSaving()}
+                onClick={handleSaveImage}
+              >
+                {isSaving() ? t("feedback.savingImage") : t("feedback.saveImage")}
+              </button>
+            </Show>
             <button type="button" className={btn} onClick={props.onClose}>
               {t("sessions.close")}
             </button>
