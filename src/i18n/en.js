@@ -222,6 +222,7 @@ export default {
     audioTest: "Test sound",
 
     overlaySection: "In-game overlay",
+    overlayCompact: "Compact overlay (last strafe and streak only)",
     overlayAutoStart: "Launch at app startup",
     overlayOpacity: "Opacity",
     overlayToggleShortcut: "Show or hide the overlay",
@@ -330,6 +331,9 @@ export default {
     lockActiveTooltip: "Game Mode (Click-Through active). Clicks pass to CS2. Shortcut: Ctrl + F11",
     lockInactiveTooltip: "Setup Mode (Draggable). Click to lock mouse events.",
     closeTooltip: "Hide overlay (Alt + O)",
+    miniTooltip: "Compact overlay",
+    expandTooltip: "Full overlay",
+    miniWaiting: "Waiting",
     waitingStrafe: "Waiting for counter-strafe...",
     speed: "Speed:",
     shotsCount: "Shots: {count}",

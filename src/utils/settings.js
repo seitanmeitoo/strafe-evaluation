@@ -106,6 +106,7 @@ export const DEFAULT_SETTINGS = {
   overlay: {
     opacity: 0.85,
     autoStart: false,
+    compact: false,
   },
   drills: { defaultMode: "normal", ...mergeDrillConfig() },
   ranks: DEFAULT_RANKS.map((r) => ({ ...r })),
@@ -279,6 +280,7 @@ export function loadSettings() {
         autoStart: typeof parsed.overlay?.autoStart === "boolean"
           ? parsed.overlay.autoStart
           : DEFAULT_SETTINGS.overlay.autoStart,
+        compact: parsed.overlay?.compact === true,
       },
       drills: loadDrillSettings(parsed.drills),
       ranks: normalizeRanks(parsed.ranks),

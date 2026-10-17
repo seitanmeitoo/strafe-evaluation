@@ -76,6 +76,7 @@ export default function SettingsModal(props) {
   const [overlayOpacity, setOverlayOpacity] = createSignal(
     DEFAULT_SETTINGS.overlay.opacity
   );
+  const [overlayCompact, setOverlayCompact] = createSignal(false);
   const [overlayAutoStart, setOverlayAutoStart] = createSignal(
     DEFAULT_SETTINGS.overlay.autoStart
   );
@@ -156,6 +157,7 @@ export default function SettingsModal(props) {
         typeof s.overlay?.opacity === "number" ? s.overlay.opacity : 0.85
       );
       setOverlayAutoStart(Boolean(s.overlay?.autoStart));
+      setOverlayCompact(s.overlay?.compact === true);
       setRanks(normalizeRanks(s.ranks));
       setProfileStatus("");
       refreshProfiles();
@@ -243,6 +245,7 @@ export default function SettingsModal(props) {
     setAudioVolume(DEFAULT_SETTINGS.audio.volume);
     setOverlayOpacity(DEFAULT_SETTINGS.overlay.opacity);
     setOverlayAutoStart(DEFAULT_SETTINGS.overlay.autoStart);
+    setOverlayCompact(DEFAULT_SETTINGS.overlay.compact);
     setActiveRebind(null);
     setRebindError(null);
   }
@@ -298,6 +301,7 @@ export default function SettingsModal(props) {
           DEFAULT_SETTINGS.overlay.opacity
         ),
         autoStart: overlayAutoStart(),
+        compact: overlayCompact(),
       },
       ranks: normalizeRanks(ranks()),
     });
@@ -472,6 +476,16 @@ export default function SettingsModal(props) {
                   <span>{t("settings.overlayAutoStart")}</span>
                 </label>
               </div>
+
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={overlayCompact()}
+                  onChange={(e) => setOverlayCompact(e.target.checked)}
+                  className={`${accentCls} cursor-pointer`}
+                />
+                <span>{t("settings.overlayCompact")}</span>
+              </label>
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">

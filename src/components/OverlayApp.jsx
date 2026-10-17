@@ -33,11 +33,37 @@ export default function OverlayApp() {
   const typeSymbol = (type) =>
     type === "Perfect" ? STRAFE_SYMBOLS.perfect : type === "Early" ? STRAFE_SYMBOLS.early : STRAFE_SYMBOLS.late;
 
-  // Taller window while a drill mode is selected, to fit the drill panel.
+  const isMini = () => settings().overlay?.compact === true;
+
+  // Window size: compact widget, taller while a drill mode is selected, or the normal HUD.
   createEffect(() => {
-    const height = isDrillMode() ? 180 : 135;
-    appWindow.setSize(new LogicalSize(270, height)).catch((e) => console.warn("Could not resize overlay:", e));
+    const [width, height] = isMini() ? [150, 40] : isDrillMode() ? [270, 180] : [270, 135];
+    appWindow.setSize(new LogicalSize(width, height)).catch((e) => console.warn("Could not resize overlay:", e));
   });
+
+  function toggleMini() {
+    const updated = { ...settings(), overlay: { ...settings().overlay, compact: !isMini() } };
+    setSettings(updated);
+    saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
+  }
+
+  // Main figure of the compact widget while a drill is selected (null: show the last strafe).
+  const miniDrillText = () => {
+    const v = drillView();
+    if (v.mode === "normal") return null;
+    if (v.status === "finished" && v.result) return t("drills.score", { score: v.result.score });
+    if (v.status !== "running" || !v.progress) return null;
+    const p = v.progress;
+    if (v.mode === "timed") {
+      const s = Math.max(0, p.remainingSec || 0);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    }
+    if (v.mode === "focus") return `${p.counted} / ${p.target}`;
+    if (v.mode === "streak") return `${STRAFE_SYMBOLS.perfect} ${p.streak} / ${p.target}`;
+    if (v.mode === "warmup") return `${p.phaseIndex + 1}/${p.phaseCount}  ${p.phaseDone} / ${p.phase?.count}`;
+    return null;
+  };
 
   // Follow the app theme (each window has its own <html>).
   createEffect(() => {
@@ -261,7 +287,53 @@ export default function OverlayApp() {
   const iconBtn =
     "h-6 min-w-6 px-1 rounded border border-line bg-card text-muted hover:text-ink text-[11px] flex items-center justify-center cursor-pointer";
 
+  const mini = (
+    <div className="w-[150px] h-[40px] select-none p-1 overflow-hidden" style={{ opacity: opacity() }}>
+      <div
+        className={`w-full h-full rounded-lg pl-2 pr-1 flex items-center gap-1.5 bg-surface text-ink border hud-glass ${
+          isLocked() ? "border-accent" : "border-line"
+        }`}
+      >
+        <div
+          data-tauri-drag-region
+          className="flex-1 min-w-0 flex items-center gap-1.5 cursor-move text-[12px] font-bold whitespace-nowrap overflow-hidden"
+          title={t("overlayApp.dragTooltip")}
+        >
+          <Show
+            when={miniDrillText()}
+            fallback={
+              <Show when={lastStrafe()} fallback={<span className="pointer-events-none text-muted font-semibold">{t("overlayApp.miniWaiting")}</span>}>
+                <span className="pointer-events-none" style={{ color: typeColor(lastStrafe().type) }}>
+                  {typeSymbol(lastStrafe().type)}{" "}
+                  {lastStrafe().type === "Perfect" ? t("table.perfect") : `${Math.round(lastStrafe().duration / 1000)} ms`}
+                </span>
+                <span
+                  className="pointer-events-none text-[11px]"
+                  style={{ color: perfectStreak() > 0 ? colors().perfect : undefined }}
+                >
+                  {STRAFE_SYMBOLS.perfect} {perfectStreak()}
+                </span>
+              </Show>
+            }
+          >
+            <span className="pointer-events-none">{miniDrillText()}</span>
+          </Show>
+        </div>
+        <button
+          type="button"
+          onClick={toggleMini}
+          className="h-6 w-6 shrink-0 rounded border border-line bg-card text-muted hover:text-ink text-[12px] leading-none flex items-center justify-center cursor-pointer"
+          title={t("overlayApp.expandTooltip")}
+          aria-label={t("overlayApp.expandTooltip")}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+
   return (
+    <Show when={!isMini()} fallback={mini}>
     <div
       className={`w-[270px] select-none p-1.5 overflow-hidden ${isDrillMode() ? "h-[180px]" : "h-[135px]"}`}
       style={{ opacity: opacity() }}
@@ -275,7 +347,7 @@ export default function OverlayApp() {
         <div className="flex items-center gap-2">
           <div
             data-tauri-drag-region
-            className="flex-1 flex items-center gap-1.5 cursor-move text-[11px] font-semibold text-muted hover:text-ink"
+            className="flex-1 min-w-0 flex items-center gap-1.5 cursor-move text-[11px] font-semibold text-muted hover:text-ink whitespace-nowrap overflow-hidden"
             title={t("overlayApp.dragTooltip")}
           >
             <span className="pointer-events-none">⋮⋮</span>
@@ -300,6 +372,15 @@ export default function OverlayApp() {
             title={isLocked() ? t("overlayApp.lockActiveTooltip") : t("overlayApp.lockInactiveTooltip")}
           >
             <LockIcon open={!isLocked()} size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={toggleMini}
+            className={iconBtn}
+            title={t("overlayApp.miniTooltip")}
+            aria-label={t("overlayApp.miniTooltip")}
+          >
+            –
           </button>
           <button type="button" onClick={handleClose} className={iconBtn} title={t("overlayApp.closeTooltip")}>
             <CloseIcon size={11} />
@@ -356,5 +437,6 @@ export default function OverlayApp() {
         </div>
       </div>
     </div>
+    </Show>
   );
 }
