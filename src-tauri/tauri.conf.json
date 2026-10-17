@@ -17,7 +17,10 @@
         "open": true
       },
       "window": {
-        "all": true
+        "all": false,
+        "setPosition": true,
+        "setSize": true,
+        "startDragging": true
       }
     },
     "windows": [
@@ -45,7 +48,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'"
     },
     "bundle": {
       "active": true,
