@@ -3,6 +3,7 @@
 
 mod keyboard;
 mod overlay;
+mod storage;
 mod tracker;
 
 use keyboard::{ActiveKeyBindings, KeyboardLayout, MonitoredKeys};
@@ -185,7 +186,11 @@ fn main() {
             toggle_overlay,
             set_overlay_click_through,
             toggle_overlay_lock_cmd,
-            get_overlay_state
+            get_overlay_state,
+            storage::export_profile,
+            storage::list_profiles,
+            storage::read_profile,
+            storage::save_image
         ])
         .on_window_event(|event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event.event() {

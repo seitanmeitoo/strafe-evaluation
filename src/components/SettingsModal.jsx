@@ -7,6 +7,7 @@ import {
   SETTINGS_BOUNDS,
   clampNumber,
   cloneSettings,
+  loadSettings,
   normalizeKey,
   formatKeyDisplay,
   STRAFE_SYMBOLS,
@@ -17,6 +18,8 @@ import { open } from "@tauri-apps/api/shell";
 import { t } from "../i18n";
 import { CloseIcon } from "./Icons";
 import { DEFAULT_RANKS, normalizeRanks } from "../utils/ranks";
+import { exportProfile, importProfile, listProfiles } from "../utils/profile";
+import { emit } from "@tauri-apps/api/event";
 
 // Shared style strings (same look as the buttons of the main window).
 const btn =
@@ -81,6 +84,48 @@ export default function SettingsModal(props) {
   const [rapidTriggerNotice, setRapidTriggerNotice] = createSignal(false);
   const [ranks, setRanks] = createSignal(DEFAULT_RANKS.map((r) => ({ ...r })));
 
+  // Profile export / import
+  const [profiles, setProfiles] = createSignal([]);
+  const [selectedProfile, setSelectedProfile] = createSignal("");
+  const [profileStatus, setProfileStatus] = createSignal("");
+
+  async function refreshProfiles() {
+    try {
+      const list = await listProfiles();
+      setProfiles(list);
+      setSelectedProfile((current) => (list.includes(current) ? current : list[0] || ""));
+    } catch (e) {
+      console.error("Failed to list profiles:", e);
+      setProfiles([]);
+    }
+  }
+
+  async function handleExportProfile() {
+    try {
+      const path = await exportProfile();
+      setProfileStatus(t("settings.profileExported", { path }));
+      refreshProfiles();
+    } catch (e) {
+      console.error("Failed to export profile:", e);
+      setProfileStatus(t("settings.profileError", { error: e }));
+    }
+  }
+
+  async function handleImportProfile() {
+    const file = selectedProfile();
+    if (!file || !confirm(t("settings.profileImportConfirm", { file }))) return;
+    try {
+      const { sessionsAdded, drillsAdded } = await importProfile(file);
+      setProfileStatus(t("settings.profileImported", { sessions: sessionsAdded, drills: drillsAdded }));
+      // The imported settings apply to every window; the main window reloads to read them.
+      await emit("settings-changed", loadSettings()).catch(() => {});
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      console.error("Failed to import profile:", e);
+      setProfileStatus(t("settings.profileError", { error: e?.message || e }));
+    }
+  }
+
   function updateRank(index, patch) {
     setRanks((list) => list.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   }
@@ -112,6 +157,8 @@ export default function SettingsModal(props) {
       );
       setOverlayAutoStart(Boolean(s.overlay?.autoStart));
       setRanks(normalizeRanks(s.ranks));
+      setProfileStatus("");
+      refreshProfiles();
       setActiveRebind(null);
       setRebindError(null);
       setRapidTriggerNotice(false);
@@ -694,6 +741,40 @@ export default function SettingsModal(props) {
                   )}
                 </For>
               </div>
+            </div>
+
+            {/* Profile */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.profileSection")}</h3>
+              <p className={desc}>{t("settings.profileDesc")}</p>
+              <div className="flex items-center gap-2">
+                <button type="button" className={btnSm} onClick={handleExportProfile}>
+                  {t("settings.profileExport")}
+                </button>
+                <select
+                  className="flex-1 min-w-0 h-7 bg-card border border-line rounded-md px-1 text-[12px] text-ink focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
+                  value={selectedProfile()}
+                  disabled={profiles().length === 0}
+                  onChange={(e) => setSelectedProfile(e.target.value)}
+                  aria-label={t("settings.profileFile")}
+                >
+                  <Show when={profiles().length === 0}>
+                    <option value="">{t("settings.profileNone")}</option>
+                  </Show>
+                  <For each={profiles()}>{(name) => <option value={name}>{name}</option>}</For>
+                </select>
+                <button
+                  type="button"
+                  className={`${btnSm} disabled:opacity-40 disabled:pointer-events-none`}
+                  disabled={!selectedProfile()}
+                  onClick={handleImportProfile}
+                >
+                  {t("settings.profileImport")}
+                </button>
+              </div>
+              <Show when={profileStatus()}>
+                <p className="text-[12px] break-all">{profileStatus()}</p>
+              </Show>
             </div>
 
             {/* About */}
