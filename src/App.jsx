@@ -137,6 +137,13 @@ export default function App() {
     emit("settings-changed", updated).catch(() => {});
   }
 
+  function saveDrillSettings(newDrills) {
+    const updated = { ...settings(), drills: newDrills };
+    setSettings(updated);
+    saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
+  }
+
   const isDark = () => settings().theme !== "light";
 
   // Apply the theme on <html> so the color tokens also reach body and modals.
@@ -371,7 +378,12 @@ export default function App() {
       </Show>
 
       <Show when={page() === "training"}>
-        <TrainingPage drills={drills} />
+        <TrainingPage
+          drills={drills}
+          drillSettings={settings().drills}
+          keys={settings().keys}
+          onSaveDrills={saveDrillSettings}
+        />
       </Show>
 
       <Show when={page() === "live"}>
