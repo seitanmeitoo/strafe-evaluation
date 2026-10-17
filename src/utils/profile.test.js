@@ -131,11 +131,10 @@ describe("applyProfile", () => {
       expect(applyProfile(profile({ sessions: [null, session({ id: "ok" })] })).sessionsAdded).toBe(1);
     });
 
-    // Known bug: duplicates inside the imported file are not detected, because the set of
-    // known ids is only built from the current sessions.
-    it.fails("does not import the same session twice from one file", () => {
+    it("does not import the same session twice from one file", () => {
       const dup = session({ id: "dup" });
       expect(applyProfile(profile({ sessions: [dup, { ...dup }] })).sessionsAdded).toBe(1);
+      expect(loadSessions()).toHaveLength(1);
     });
   });
 

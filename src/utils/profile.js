@@ -46,8 +46,13 @@ export async function listProfiles() {
 
 function unionBy(current, incoming, keyOf, max) {
   const seen = new Set(current.map(keyOf));
-  const merged = [...current, ...incoming.filter((item) => item && !seen.has(keyOf(item)))];
-  return merged
+  // Also skips items repeated inside the incoming list.
+  const added = incoming.filter((item) => {
+    if (!item || seen.has(keyOf(item))) return false;
+    seen.add(keyOf(item));
+    return true;
+  });
+  return [...current, ...added]
     .sort((a, b) => Date.parse(b.timestamp || b.startedAt) - Date.parse(a.timestamp || a.startedAt))
     .slice(0, max);
 }
