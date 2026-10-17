@@ -5,6 +5,13 @@ import solid from "vite-plugin-solid";
 export default defineConfig(async () => ({
   plugins: [solid()],
 
+  // Unit tests (npm test): jsdom provides localStorage for the modules that use it.
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.js"],
+    setupFiles: ["src/test/setup.js"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent vite from obscuring rust errors
