@@ -14,6 +14,33 @@ on:
 # CI compilation and release workflow (Windows target)
 
 jobs:
+  checks:
+    # Unit tests and Rust lints on pull requests and the dev branch.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - name: unit tests
+        run: npm test
+
+      - name: clippy
+        run: cargo clippy -- -D warnings
+        working-directory: src-tauri
+
   publish-tauri:
     permissions:
       contents: write
@@ -39,13 +66,25 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
+      - name: Sync version from package.json to tauri.conf.json
+        run: |
+          node -e "
+          const fs = require('fs');
+          const pkg = require('./package.json');
+          const p = './src-tauri/tauri.conf.json';
+          const conf = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (conf.package) { conf.package.version = pkg.version; }
+          else { conf.version = pkg.version; }
+          fs.writeFileSync(p, JSON.stringify(conf, null, 2) + '\n');
+          "
+      
       - uses: tauri-apps/tauri-action@v0
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__
-          releaseName: 'App v__VERSION__'
+          releaseName: 'Strafe Evolution v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false

@@ -1,48 +1,62 @@
-# Track your strafe performance in games! 
+# Strafe Evolution
 
-#### Find out if you would benefit from Snap Tap and SOCD.
+A desktop tool that measures your counter-strafes in Counter-Strike 2 and shows, strafe after strafe, how close you are to a clean stop.
 
-<img src="https://raw.githubusercontent.com/patrikzudel/strafe-evaluation/main/preview.png?sanitize=true#gh-dark-mode-only" alt="Logo">
+![Strafe Evolution main window](preview.png)
 
-⭐️ Star the repo if you like it!
+## What it measures
 
-  ## 📖 How to use
+A counter-strafe is the switch from one movement key to the opposite one (for example A to D) to stop before shooting. Strafe Evolution times that switch and classifies it:
 
-  - Visit the GitHub release page [**here**](https://github.com/patrikzudel/strafe-evaluation/releases).
+- **Early**: you released the first key before pressing the opposite one. The time shown is the gap during which no key was held.
+- **Late**: you pressed the opposite key while still holding the first one. The time shown is how long both keys were held together.
+- **Perfect**: the gap or overlap stayed under the Perfect threshold (1.6 ms by default). It is recorded as 0 ms.
 
-  - Launch the setup and install the program.
+Switches longer than the maximum evaluated duration (250 ms by default) are ignored as ordinary changes of direction.
 
-  - Start the program and strafe! 
+## Features
 
-    - **Late Release** — both keys were pressed for X milliseconds
-    - **Early Release** — no keys were pressed for X milliseconds
-    - **Perfect strafe** — the strafe was deemed perfect within a 2 millisecond margin of error
-    - If you **need help** with understanding what is a **"Early"** or **"Late"** strafe, **click on the buttons next to "A" and "D"**. Clicking a button will trigger an **animation** that showcases each strafe type.
+- **Statistics**: median, average, min, max, standard deviation and sample count for Early and Late strafes, with a filter by direction (A → D or D → A).
+- **Charts**: a distribution histogram with optional target lines for Early and Late, and a trend view of the last 20 strafes.
+- **CS2 metrics**: when you fire (mouse1) within 300 ms of a strafe, the app estimates your residual speed at the shot and whether the shot was accurate (below 85 u/s), plus your average shot delay. "Shots only" mode keeps only strafes followed by a shot.
+- **In-game overlay**: a small always-on-top window showing your last strafe, speed at the shot and session accuracy.
+  - `Alt + O` shows or hides it.
+  - `Ctrl + F11` locks it so clicks pass through to the game; unlock it to drag it elsewhere. Its position is remembered.
+- **Sessions**: saving a session, or resetting one with at least 3 strafes, adds it to the history (last 100 sessions are kept). The current strafes can be exported as CSV.
+- **Keys**: rebind left, right, forward and backward, or use the QWERTY, AZERTY, arrows and ESDF presets. An AZERTY layout is detected on first launch.
+- **Tolerances**: adjustable Perfect threshold, maximum duration and target lines, plus a preset for Rapid Trigger keyboards (Perfect 1.0 ms, max 200 ms, targets 10 and 12 ms).
+- **Display**: light and dark themes, colorblind palettes (deuteranopia, protanopia, tritanopia, high contrast), and a distinct shape for each strafe type (◀ Early, ▶ Late, ★ Perfect). Optional sound feedback.
 
-**Note**: The tracking will likely not work while **FACEIT Anti-cheat** is running, they might block the global input tracking.
+## Install
 
-## ⚡ Features
-- Tracking of strafe performance
-- Preview animations of all monitored strafe types - Early, Late and Perfect
-## 💬 Reasonings
-I initially created this to collect data to advance the discussion on Snap Tap and SOCD.
+Download the Windows installer from the [Releases page](https://github.com/seitanmeitoo/strafe-evaluation/releases), run it, then start Strafe Evolution and strafe.
 
-After Snap Tap was banned, this should mainly serve as a training tool used for improving strafe performance as it provides real-time feedback. 
+## Build from source
 
-## 📖 How it works
+Requirements: [Node.js](https://nodejs.org/) (LTS), [Rust](https://www.rust-lang.org/tools/install) (stable) and, on Windows, the WebView2 runtime (already included in Windows 10 and 11). See the [Tauri v1 prerequisites](https://v1.tauri.app/v1/guides/getting-started/prerequisites) for details.
 
-Stack: Rust, Solid.js, Tauri, Tailwind
+```bash
+npm ci
+npm run tauri dev
+```
 
-## 🍀 Supporters
+To build the installer:
 
-> If you like this project and would like to support me, feel free to buy me a ramen! 🍜🍜🍜
+```bash
+npm run tauri build
+```
 
-**[!["Buy Me A Ramen"](https://raw.githubusercontent.com/patrikzudel/patrikzudel/main/ramenpaypal.png)](https://ko-fi.com/patrikzudel)**
+## Limitations
 
-## 📃 Dependencies
-- Cargo: Inputbot
-- NPM: Chart.js, Tailwind
+- **Precision**: the keyboard state is read every 0.5 ms, so very short gaps or overlaps are measured with that granularity. Keep this in mind when setting a Perfect threshold close to 1 ms.
+- **Global key tracking**: the movement keys and mouse1 are read system-wide while the app runs, including outside the game.
+- **Anti-cheat**: some anti-cheat clients (FACEIT in particular) may block global input reading. The app does not interact with the game itself.
+- **CS2 metrics are estimates**: residual speed comes from a simplified model of CS2 movement, not from the game.
 
----
+## License
 
-💻❤🍲 by [Patrik Žúdel](https://twitter.com/PatrikZero)
+Strafe Evolution is released under the [GNU General Public License v3.0](LICENSE).
+
+## Credits
+
+Strafe Evolution is based on [strafe-evaluation](https://github.com/patrikzudel/strafe-evaluation) by Patrik Žúdel, also released under the GPL-3.0 license. Built with Tauri, Solid.js, Tailwind CSS, Chart.js and inputbot.

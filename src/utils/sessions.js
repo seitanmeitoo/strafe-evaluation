@@ -1,7 +1,10 @@
 import { getStats } from "./stats";
 import { getCs2Metrics } from "./cs2Physics";
+import { analyzeSession } from "./analysis";
+import { buildFeedback } from "./feedback";
 
 const SESSIONS_STORAGE_KEY = "strafe_evaluation_sessions";
+const MAX_SESSIONS = 1000;
 
 export function loadSessions() {
   try {
@@ -40,11 +43,32 @@ export function saveSessionSnapshot(strafes) {
     accurateRate: metrics.accurateRate,
     avgShotDelayMs: metrics.avgShotDelay,
     avgResidualSpeed: metrics.avgResidualSpeed,
+    // Weak side, fatigue and consistency (sessions saved before this field have none).
+    analysis: analyzeSession(strafes),
   };
 
   try {
     const sessions = loadSessions();
-    const updated = [session, ...sessions].slice(0, 100); // Keep last 100 sessions
+    if (sessions.length > 0) {
+      const last = sessions[0];
+      if (
+        last.totalStrafes === total &&
+        last.perfectCount === perfectCount &&
+        last.earlyCount === earlyCount &&
+        last.lateCount === lateCount &&
+        last.medianDurationMs === Math.round(stats.median / 1000) &&
+        last.avgDurationMs === Math.round(stats.average / 1000) &&
+        last.totalShots === metrics.totalShots &&
+        last.accurateShots === metrics.accurateShots &&
+        last.avgResidualSpeed === metrics.avgResidualSpeed
+      ) {
+        return last;
+      }
+    }
+    // Rule-based summary, compared with the session saved just before this one.
+    session.feedback = buildFeedback(session, sessions[0] || null);
+    // Long history for the progress page; capped to stay well inside the storage quota.
+    const updated = [session, ...sessions].slice(0, MAX_SESSIONS);
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
     return session;
   } catch (e) {

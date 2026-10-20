@@ -4,11 +4,47 @@ import {
   DEFAULT_SETTINGS,
   COLORBLIND_PALETTES,
   RAPID_TRIGGER_PRESET,
+  SETTINGS_BOUNDS,
+  clampNumber,
+  cloneSettings,
+  loadSettings,
+  normalizeKey,
   formatKeyDisplay,
   STRAFE_SYMBOLS,
+  getStrafeColors,
 } from "../utils/settings";
 import { playStrafeSound } from "../utils/audio";
-import { t, setLanguage } from "../i18n";
+import { open } from "@tauri-apps/api/shell";
+import { t } from "../i18n";
+import { CloseIcon } from "./Icons";
+import { DEFAULT_RANKS, normalizeRanks } from "../utils/ranks";
+import { exportProfile, importProfile, listProfiles } from "../utils/profile";
+import { emit } from "@tauri-apps/api/event";
+
+// Shared style strings (same look as the buttons of the main window).
+const btn =
+  "h-8 px-3 rounded-md border border-line bg-card text-ink text-[13px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
+const btnSm =
+  "h-7 px-2.5 rounded-md border border-line bg-card text-ink text-[12px] font-medium hover:border-muted transition-colors cursor-pointer select-none";
+const btnPrimary =
+  "h-8 px-3 rounded-md bg-accent text-accent-ink text-[13px] font-semibold hover:opacity-90 transition-opacity cursor-pointer select-none";
+const iconBtn =
+  "h-8 w-8 flex items-center justify-center rounded-md border border-line bg-card text-ink hover:border-muted transition-colors cursor-pointer select-none";
+const choice = (active) =>
+  `rounded-md border bg-card text-[13px] transition-colors cursor-pointer select-none ${
+    active
+      ? "border-accent ring-1 ring-accent text-ink font-semibold"
+      : "border-line text-muted hover:border-muted hover:text-ink"
+  }`;
+const numInput =
+  "h-7 bg-card border border-line rounded-md px-2 text-right text-[13px] font-semibold text-ink focus:outline-none focus:border-accent";
+const keycap =
+  "rounded-md bg-key border-b-2 border-key-edge px-2 py-0.5 text-[12px] font-bold";
+const accentCls = "accent-[rgb(var(--color-accent))]";
+const sectionBase = "py-4 border-t border-line first:border-t-0";
+const section = `${sectionBase} space-y-3`;
+const sectionTitle = "text-[13px] font-semibold";
+const desc = "text-[12px] text-muted";
 
 export default function SettingsModal(props) {
   const [keys, setKeys] = createSignal({ ...DEFAULT_SETTINGS.keys });
@@ -28,7 +64,6 @@ export default function SettingsModal(props) {
     DEFAULT_SETTINGS.visualGoals.lateTargetMs
   );
   const [theme, setTheme] = createSignal(DEFAULT_SETTINGS.theme);
-  const [lang, setLang] = createSignal(DEFAULT_SETTINGS.language);
   const [colorblindMode, setColorblindMode] = createSignal(
     DEFAULT_SETTINGS.colorblindMode
   );
@@ -41,11 +76,66 @@ export default function SettingsModal(props) {
   const [overlayOpacity, setOverlayOpacity] = createSignal(
     DEFAULT_SETTINGS.overlay.opacity
   );
+  const [overlayCompact, setOverlayCompact] = createSignal(false);
   const [overlayAutoStart, setOverlayAutoStart] = createSignal(
     DEFAULT_SETTINGS.overlay.autoStart
   );
   const [activeRebind, setActiveRebind] = createSignal(null);
+  const [rebindError, setRebindError] = createSignal(null);
   const [rapidTriggerNotice, setRapidTriggerNotice] = createSignal(false);
+  const [ranks, setRanks] = createSignal(DEFAULT_RANKS.map((r) => ({ ...r })));
+
+  // Profile export / import
+  const [profiles, setProfiles] = createSignal([]);
+  const [selectedProfile, setSelectedProfile] = createSignal("");
+  const [profileStatus, setProfileStatus] = createSignal("");
+
+  async function refreshProfiles() {
+    try {
+      const list = await listProfiles();
+      setProfiles(list);
+      setSelectedProfile((current) => (list.includes(current) ? current : list[0] || ""));
+    } catch (e) {
+      console.error("Failed to list profiles:", e);
+      setProfiles([]);
+    }
+  }
+
+  async function handleExportProfile() {
+    try {
+      const path = await exportProfile();
+      setProfileStatus(t("settings.profileExported", { path }));
+      refreshProfiles();
+    } catch (e) {
+      console.error("Failed to export profile:", e);
+      setProfileStatus(t("settings.profileError", { error: e }));
+    }
+  }
+
+  async function handleImportProfile() {
+    const file = selectedProfile();
+    if (!file || !confirm(t("settings.profileImportConfirm", { file }))) return;
+    try {
+      const { sessionsAdded, drillsAdded } = await importProfile(file);
+      setProfileStatus(t("settings.profileImported", { sessions: sessionsAdded, drills: drillsAdded }));
+      // The imported settings apply to every window; the main window reloads to read them.
+      await emit("settings-changed", loadSettings()).catch(() => {});
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      console.error("Failed to import profile:", e);
+      setProfileStatus(t("settings.profileError", { error: e?.message || e }));
+    }
+  }
+
+  function updateRank(index, patch) {
+    setRanks((list) => list.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  function handleCancel() {
+    setActiveRebind(null);
+    setRebindError(null);
+    props.onClose();
+  }
 
   // Sync state whenever modal is opened
   createEffect(() => {
@@ -58,7 +148,6 @@ export default function SettingsModal(props) {
       setEarlyTargetMs(s.visualGoals?.earlyTargetMs ?? 15);
       setLateTargetMs(s.visualGoals?.lateTargetMs ?? 20);
       setTheme(s.theme || "dark");
-      setLang(s.language || "fr");
       setColorblindMode(s.colorblindMode || "default");
       setAudioEnabled(
         typeof s.audio?.enabled === "boolean" ? s.audio.enabled : true
@@ -68,7 +157,12 @@ export default function SettingsModal(props) {
         typeof s.overlay?.opacity === "number" ? s.overlay.opacity : 0.85
       );
       setOverlayAutoStart(Boolean(s.overlay?.autoStart));
+      setOverlayCompact(s.overlay?.compact === true);
+      setRanks(normalizeRanks(s.ranks));
+      setProfileStatus("");
+      refreshProfiles();
       setActiveRebind(null);
+      setRebindError(null);
       setRapidTriggerNotice(false);
     }
   });
@@ -84,18 +178,27 @@ export default function SettingsModal(props) {
 
       if (e.key === "Escape") {
         setActiveRebind(null);
+        setRebindError(null);
         return;
       }
 
-      let captured = e.key;
-      if (captured.startsWith("Arrow")) {
-        // Keep ArrowLeft, ArrowRight, etc.
-      } else if (captured === " ") {
-        captured = "Space";
-      } else if (captured.length === 1) {
-        captured = captured.toUpperCase();
+      const captured = normalizeKey(e.key);
+      if (!captured) {
+        setRebindError(t("settings.unsupportedKey"));
+        return;
       }
 
+      // Check if key is already assigned to another direction
+      const currentKeys = keys();
+      const duplicateDir = Object.entries(currentKeys).find(
+        ([dir, k]) => dir !== rebindingDirection && k.toUpperCase() === captured.toUpperCase()
+      );
+      if (duplicateDir) {
+        setRebindError(t("settings.duplicateKey", { key: captured }));
+        return;
+      }
+
+      setRebindError(null);
       setKeys((prev) => ({
         ...prev,
         [rebindingDirection]: captured,
@@ -113,6 +216,7 @@ export default function SettingsModal(props) {
     const preset = PRESETS[presetKey];
     if (preset) {
       setKeys({ ...preset.keys });
+      setRebindError(null);
     }
   }
 
@@ -123,10 +227,12 @@ export default function SettingsModal(props) {
     setEarlyTargetMs(RAPID_TRIGGER_PRESET.visualGoals.earlyTargetMs);
     setLateTargetMs(RAPID_TRIGGER_PRESET.visualGoals.lateTargetMs);
     setRapidTriggerNotice(true);
+    setRebindError(null);
     setTimeout(() => setRapidTriggerNotice(false), 4000);
   }
 
   function handleReset() {
+    setRanks(DEFAULT_RANKS.map((r) => ({ ...r })));
     setKeys({ ...DEFAULT_SETTINGS.keys });
     setPerfectThresholdMs(DEFAULT_SETTINGS.perfectThresholdMs);
     setMaxStrafeMs(DEFAULT_SETTINGS.maxStrafeMs);
@@ -134,39 +240,70 @@ export default function SettingsModal(props) {
     setEarlyTargetMs(DEFAULT_SETTINGS.visualGoals.earlyTargetMs);
     setLateTargetMs(DEFAULT_SETTINGS.visualGoals.lateTargetMs);
     setTheme(DEFAULT_SETTINGS.theme);
-    setLang(DEFAULT_SETTINGS.language);
     setColorblindMode(DEFAULT_SETTINGS.colorblindMode);
     setAudioEnabled(DEFAULT_SETTINGS.audio.enabled);
     setAudioVolume(DEFAULT_SETTINGS.audio.volume);
     setOverlayOpacity(DEFAULT_SETTINGS.overlay.opacity);
     setOverlayAutoStart(DEFAULT_SETTINGS.overlay.autoStart);
+    setOverlayCompact(DEFAULT_SETTINGS.overlay.compact);
     setActiveRebind(null);
+    setRebindError(null);
   }
 
   function handleSave() {
-    const newLang = lang();
-    setLanguage(newLang);
-
     props.onSave({
+      // Keep the settings this modal does not edit (drill configuration, ...).
+      ...cloneSettings(props.currentSettings),
       keys: keys(),
-      perfectThresholdMs: Math.max(0, Number(perfectThresholdMs()) || 0),
-      maxStrafeMs: Math.max(50, Number(maxStrafeMs()) || 250),
+      perfectThresholdMs: clampNumber(
+        perfectThresholdMs(),
+        SETTINGS_BOUNDS.perfectThresholdMs.min,
+        SETTINGS_BOUNDS.perfectThresholdMs.max,
+        DEFAULT_SETTINGS.perfectThresholdMs
+      ),
+      maxStrafeMs: clampNumber(
+        maxStrafeMs(),
+        SETTINGS_BOUNDS.maxStrafeMs.min,
+        SETTINGS_BOUNDS.maxStrafeMs.max,
+        DEFAULT_SETTINGS.maxStrafeMs
+      ),
       visualGoals: {
         enabled: goalsEnabled(),
-        earlyTargetMs: Math.max(1, Number(earlyTargetMs()) || 15),
-        lateTargetMs: Math.max(1, Number(lateTargetMs()) || 20),
+        earlyTargetMs: clampNumber(
+          earlyTargetMs(),
+          SETTINGS_BOUNDS.earlyTargetMs.min,
+          SETTINGS_BOUNDS.earlyTargetMs.max,
+          DEFAULT_SETTINGS.visualGoals.earlyTargetMs
+        ),
+        lateTargetMs: clampNumber(
+          lateTargetMs(),
+          SETTINGS_BOUNDS.lateTargetMs.min,
+          SETTINGS_BOUNDS.lateTargetMs.max,
+          DEFAULT_SETTINGS.visualGoals.lateTargetMs
+        ),
       },
       theme: theme(),
-      language: newLang,
       colorblindMode: colorblindMode(),
       audio: {
         enabled: audioEnabled(),
-        volume: Math.min(1, Math.max(0, Number(audioVolume()) || 0)),
+        volume: clampNumber(
+          audioVolume(),
+          SETTINGS_BOUNDS.audioVolume.min,
+          SETTINGS_BOUNDS.audioVolume.max,
+          DEFAULT_SETTINGS.audio.volume
+        ),
       },
       overlay: {
-        opacity: Math.min(1, Math.max(0.3, Number(overlayOpacity()) || 0.85)),
+        opacity: clampNumber(
+          overlayOpacity(),
+          SETTINGS_BOUNDS.overlayOpacity.min,
+          SETTINGS_BOUNDS.overlayOpacity.max,
+          DEFAULT_SETTINGS.overlay.opacity
+        ),
         autoStart: overlayAutoStart(),
+        compact: overlayCompact(),
       },
+      ranks: normalizeRanks(ranks()),
     });
     props.onClose();
   }
@@ -175,218 +312,149 @@ export default function SettingsModal(props) {
     playStrafeSound(type, audioVolume());
   }
 
+  const colors = () => getStrafeColors(colorblindMode());
+
+  const keyRows = [
+    { dir: "left", label: "settings.keyLeft" },
+    { dir: "right", label: "settings.keyRight" },
+    { dir: "forward", label: "settings.keyForward" },
+    { dir: "backward", label: "settings.keyBackward" },
+  ];
+
   return (
     <Show when={props.isOpen}>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm select-none"
+        className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 select-none"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
-            setActiveRebind(null);
-            props.onClose();
+            handleCancel();
           }
         }}
       >
-        <div className="bg-[#1e293b] text-white rounded-2xl shadow-2xl border border-slate-700 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="bg-surface text-ink rounded-xl border border-line shadow-lg w-full max-w-xl max-h-[calc(100vh-48px)] flex flex-col overflow-hidden text-[13px]">
           {/* Header */}
-          <div className="flex justify-between items-center px-6 py-4 border-b border-slate-700 bg-[#0f172a]">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚙️</span>
-              <h2 className="text-lg font-bold text-slate-100 tracking-wide">
-                {t("settings.title")}
-              </h2>
-            </div>
+          <div className="h-12 shrink-0 flex justify-between items-center px-5 border-b border-line">
+            <h2 className="text-base font-bold">{t("settings.title")}</h2>
             <button
               type="button"
-              className="text-slate-400 hover:text-white text-lg font-bold w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              onClick={props.onClose}
+              className={iconBtn}
+              onClick={handleCancel}
               title={t("settings.close")}
             >
-              ✕
+              <CloseIcon />
             </button>
           </div>
 
           {/* Modal body */}
-          <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(92vh-130px)] text-sm">
-            {/* Language & Theme Section */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Language */}
-              <div>
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block mb-2">
-                  {t("settings.languageSection")}
-                </label>
-                <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 text-xs">
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      lang() === "fr"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => {
-                      setLang("fr");
-                      setLanguage("fr");
-                    }}
-                  >
-                    🇫🇷 FR
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      lang() === "en"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => {
-                      setLang("en");
-                      setLanguage("en");
-                    }}
-                  >
-                    🇬🇧 EN
-                  </button>
-                </div>
-              </div>
-
-              {/* Theme */}
-              <div>
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block mb-2">
-                  {t("settings.themeSection")}
-                </label>
-                <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-lg border border-slate-700/60 text-xs">
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      theme() === "dark"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => setTheme("dark")}
-                  >
-                    {t("settings.themeDark")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 py-1 rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                      theme() === "light"
-                        ? "bg-sky-500 text-white font-bold shadow-sm"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                    onClick={() => setTheme("light")}
-                  >
-                    {t("settings.themeLight")}
-                  </button>
-                </div>
+          <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5">
+            {/* Theme */}
+            <div className={`${sectionBase} flex items-center justify-between`}>
+              <h3 className={sectionTitle}>{t("settings.themeSection")}</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`${choice(theme() === "dark")} h-8 w-20`}
+                  onClick={() => setTheme("dark")}
+                >
+                  {t("settings.themeDark")}
+                </button>
+                <button
+                  type="button"
+                  className={`${choice(theme() === "light")} h-8 w-20`}
+                  onClick={() => setTheme("light")}
+                >
+                  {t("settings.themeLight")}
+                </button>
               </div>
             </div>
 
-            {/* Colorblind Mode & Accessibility */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-2">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                {t("settings.colorblindSection")}
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {/* Colors */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.colorblindSection")}</h3>
+              <div className="grid grid-cols-3 gap-2">
                 <For each={Object.values(COLORBLIND_PALETTES)}>
                   {(pal) => (
                     <button
                       type="button"
-                      className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                        colorblindMode() === pal.id
-                          ? "bg-slate-800 border-sky-400 shadow-md ring-1 ring-sky-400/40"
-                          : "bg-slate-900/50 hover:bg-slate-850 border-slate-700/60 text-slate-300"
-                      }`}
+                      className={`${choice(colorblindMode() === pal.id)} px-3 py-2 flex items-center justify-between gap-2 text-left`}
                       onClick={() => setColorblindMode(pal.id)}
                     >
-                      <span className="text-xs font-semibold block">{pal.name}</span>
-                      <div className="flex items-center gap-1.5">
+                      <span>
+                        {t(`settings.colorblind${pal.id.charAt(0).toUpperCase() + pal.id.slice(1)}`)}
+                      </span>
+                      <span className="flex items-center gap-1">
                         <span
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
+                          className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black"
                           style={{ "background-color": pal.early }}
-                          title="Early"
+                          title={t("table.early")}
                         >
                           {STRAFE_SYMBOLS.early}
                         </span>
                         <span
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
+                          className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black"
                           style={{ "background-color": pal.late }}
-                          title="Late"
+                          title={t("table.late")}
                         >
                           {STRAFE_SYMBOLS.late}
                         </span>
                         <span
-                          className="w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] text-black font-black"
+                          className="w-4 h-4 rounded-sm flex items-center justify-center text-[9px] text-black font-black"
                           style={{ "background-color": pal.perfect }}
-                          title="Perfect"
+                          title={t("table.perfect")}
                         >
                           {STRAFE_SYMBOLS.perfect}
                         </span>
-                      </div>
+                      </span>
                     </button>
                   )}
                 </For>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                {t("settings.colorblindHint")}
-              </p>
+              <p className={desc}>{t("settings.colorblindHint")}</p>
             </div>
 
-            {/* Audio Feedback section */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            {/* Audio feedback */}
+            <div className={section}>
               <div className="flex justify-between items-center">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider">
-                  {t("settings.audioSection")}
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <h3 className={sectionTitle}>{t("settings.audioSection")}</h3>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={audioEnabled()}
                     onChange={(e) => setAudioEnabled(e.target.checked)}
-                    className="accent-sky-500 rounded cursor-pointer"
+                    className={`${accentCls} cursor-pointer`}
                   />
                   <span>{t("settings.audioEnable")}</span>
                 </label>
               </div>
 
               <Show when={audioEnabled()}>
-                <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-3">
+                <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-slate-300">{t("settings.audioVolume")}</span>
-                    <span className="text-xs font-mono font-bold text-sky-400">
-                      {Math.round(audioVolume() * 100)}%
-                    </span>
+                    <span>{t("settings.audioVolume")}</span>
+                    <span className="font-semibold">{Math.round(audioVolume() * 100)}%</span>
                   </div>
                   <input
                     type="range"
                     min="0"
                     max="1"
                     step="0.05"
-                    className="w-full accent-sky-500 cursor-pointer"
+                    className={`w-full ${accentCls} cursor-pointer`}
                     value={audioVolume()}
                     onInput={(e) => setAudioVolume(parseFloat(e.target.value) || 0)}
                   />
 
                   {/* Audio preview buttons */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] text-slate-400">{t("settings.audioTest")}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs hover:bg-emerald-500/30 cursor-pointer transition-all"
-                        onClick={() => testSound("Perfect")}
-                      >
-                        ✨ Perfect
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={desc}>{t("settings.audioTest")}</span>
+                    <div className="flex items-center gap-2">
+                      <button type="button" className={btnSm} onClick={() => testSound("Perfect")}>
+                        {t("table.perfect")}
                       </button>
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs hover:bg-sky-500/30 cursor-pointer transition-all"
-                        onClick={() => testSound("Early")}
-                      >
-                        ⏱️ Early
+                      <button type="button" className={btnSm} onClick={() => testSound("Early")}>
+                        {t("table.early")}
                       </button>
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs hover:bg-amber-500/30 cursor-pointer transition-all"
-                        onClick={() => testSound("Late")}
-                      >
-                        ⏱️ Late
+                      <button type="button" className={btnSm} onClick={() => testSound("Late")}>
+                        {t("table.late")}
                       </button>
                     </div>
                   </div>
@@ -394,384 +462,366 @@ export default function SettingsModal(props) {
               </Show>
             </div>
 
-            {/* Mode Overlay HUD In-Game */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            {/* In-game overlay */}
+            <div className={section}>
               <div className="flex justify-between items-center">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🪟</span>
-                  <span>{t("settings.overlaySection")}</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <h3 className={sectionTitle}>{t("settings.overlaySection")}</h3>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={overlayAutoStart()}
                     onChange={(e) => setOverlayAutoStart(e.target.checked)}
-                    className="accent-sky-500 rounded cursor-pointer"
+                    className={`${accentCls} cursor-pointer`}
                   />
                   <span>{t("settings.overlayAutoStart")}</span>
                 </label>
               </div>
 
-              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-3">
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={overlayCompact()}
+                  onChange={(e) => setOverlayCompact(e.target.checked)}
+                  className={`${accentCls} cursor-pointer`}
+                />
+                <span>{t("settings.overlayCompact")}</span>
+              </label>
+
+              <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-slate-300">{t("settings.overlayOpacity")}</span>
-                  <span className="text-xs font-mono font-bold text-sky-400">
-                    {Math.round(overlayOpacity() * 100)}%
-                  </span>
+                  <span>{t("settings.overlayOpacity")}</span>
+                  <span className="font-semibold">{Math.round(overlayOpacity() * 100)}%</span>
                 </div>
                 <input
                   type="range"
                   min="0.3"
                   max="1"
                   step="0.05"
-                  className="w-full accent-sky-500 cursor-pointer"
+                  className={`w-full ${accentCls} cursor-pointer`}
                   value={overlayOpacity()}
                   onInput={(e) => setOverlayOpacity(parseFloat(e.target.value) || 0.85)}
                 />
-
-                {/* Shortcuts & Click-Through explanation */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
-                      {t("settings.overlayToggleShortcut")}
-                    </div>
-                    <div className="text-xs font-mono font-bold text-sky-400 mt-0.5">Alt + O</div>
-                  </div>
-                  <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/40">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">
-                      {t("settings.overlayLockShortcut")}
-                    </div>
-                    <div className="text-xs font-mono font-bold text-amber-400 mt-0.5">Ctrl + F11</div>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  💡 {t("settings.overlayHint")}
-                </p>
               </div>
+
+              {/* Shortcuts */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span>{t("settings.overlayToggleShortcut")}</span>
+                  <span className={keycap}>Alt + O</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>{t("settings.overlayLockShortcut")}</span>
+                  <span className={keycap}>Ctrl + F11</span>
+                </div>
+              </div>
+              <p className={desc}>{t("settings.overlayHint")}</p>
             </div>
 
-            {/* Section 1: Key Rebinding */}
-            <div className="border-t border-slate-700/60 pt-4">
-              <div className="flex justify-between items-center mb-2">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider">
-                  {t("settings.keysSection")}
-                </label>
-              </div>
+            {/* Movement keys */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.keysSection")}</h3>
 
               {/* Preset buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                <span className="text-[11px] text-slate-400 mr-1">
-                  {t("settings.keysPresetLabel")}
-                </span>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("qwerty")}
-                >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`${desc} mr-1`}>{t("settings.keysPresetLabel")}</span>
+                <button type="button" className={btnSm} onClick={() => applyPreset("qwerty")}>
                   QWERTY
                 </button>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("azerty")}
-                >
+                <button type="button" className={btnSm} onClick={() => applyPreset("azerty")}>
                   AZERTY
                 </button>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("arrows")}
-                >
-                  Flèches
+                <button type="button" className={btnSm} onClick={() => applyPreset("arrows")}>
+                  {t("settings.presetArrows")}
                 </button>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
-                  onClick={() => applyPreset("esdf")}
-                >
+                <button type="button" className={btnSm} onClick={() => applyPreset("esdf")}>
                   ESDF
                 </button>
               </div>
 
-              {/* Grid 2x2 of movement keys */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-900/40 p-3 rounded-xl border border-slate-700/50">
-                {/* Left */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyLeft")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "left"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-sky-400 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("left")}
-                  >
-                    {activeRebind() === "left" ? "..." : formatKeyDisplay(keys().left)}
-                  </button>
-                </div>
-
-                {/* Right */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyRight")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "right"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-sky-400 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("right")}
-                  >
-                    {activeRebind() === "right" ? "..." : formatKeyDisplay(keys().right)}
-                  </button>
-                </div>
-
-                {/* Forward */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyForward")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "forward"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("forward")}
-                  >
-                    {activeRebind() === "forward" ? "..." : formatKeyDisplay(keys().forward)}
-                  </button>
-                </div>
-
-                {/* Backward */}
-                <div className="flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700/60">
-                  <span className="text-xs text-slate-300 font-medium">
-                    {t("settings.keyBackward")}
-                  </span>
-                  <button
-                    type="button"
-                    className={`min-w-14 px-2 py-1 rounded font-mono font-bold text-center text-xs transition-all cursor-pointer border ${
-                      activeRebind() === "backward"
-                        ? "bg-amber-500 text-slate-900 border-amber-400 animate-pulse"
-                        : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500"
-                    }`}
-                    onClick={() => setActiveRebind("backward")}
-                  >
-                    {activeRebind() === "backward" ? "..." : formatKeyDisplay(keys().backward)}
-                  </button>
-                </div>
+              {/* 2x2 grid of movement keys */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                <For each={keyRows}>
+                  {(row) => (
+                    <div className="flex items-center justify-between">
+                      <span>{t(row.label)}</span>
+                      <button
+                        type="button"
+                        className={`min-w-14 h-8 px-2 rounded-md font-bold text-center text-[13px] cursor-pointer transition-colors ${
+                          activeRebind() === row.dir
+                            ? "bg-key-on border-b border-key-edge translate-y-[3px]"
+                            : "bg-key border-b-4 border-key-edge hover:border-muted"
+                        }`}
+                        onClick={() => setActiveRebind(row.dir)}
+                      >
+                        {activeRebind() === row.dir ? "..." : formatKeyDisplay(keys()[row.dir])}
+                      </button>
+                    </div>
+                  )}
+                </For>
               </div>
+
+              <Show when={rebindError()}>
+                <p className="text-[12px] font-medium text-center rounded-md border border-line bg-panel px-3 py-1.5">
+                  {rebindError()}
+                </p>
+              </Show>
             </div>
 
-            {/* Section 2: Tolerances */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                {t("settings.tolerancesSection")}
-              </label>
+            {/* Tolerances */}
+            <div className={`${sectionBase} space-y-4`}>
+              <h3 className={sectionTitle}>{t("settings.tolerancesSection")}</h3>
 
-              {/* Perfect Threshold */}
-              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-1.5">
+              {/* Perfect threshold */}
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-200">
-                    {t("settings.perfectWindow")}
-                  </span>
-                  <div className="flex items-center gap-1">
+                  <span className="font-medium">{t("settings.perfectWindow")}</span>
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       step="0.1"
                       min="0"
                       max="10"
-                      className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-right font-bold text-emerald-400 focus:outline-none focus:border-emerald-400"
+                      className={`w-16 ${numInput}`}
                       value={perfectThresholdMs()}
                       onInput={(e) =>
                         setPerfectThresholdMs(parseFloat(e.target.value) || 0)
                       }
                     />
-                    <span className="text-xs text-slate-400">ms</span>
+                    <span className={desc}>ms</span>
                   </div>
                 </div>
                 <input
                   type="range"
                   min="0"
-                  max="8"
+                  max="10"
                   step="0.1"
-                  className="w-full accent-emerald-500 cursor-pointer"
+                  className={`w-full ${accentCls} cursor-pointer`}
                   value={perfectThresholdMs()}
                   onInput={(e) =>
                     setPerfectThresholdMs(parseFloat(e.target.value) || 0)
                   }
                 />
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  {t("settings.perfectWindowDesc")}
-                </p>
+                <p className={desc}>{t("settings.perfectWindowDesc")}</p>
               </div>
 
               {/* Max strafe duration */}
-              <div className="bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 space-y-1.5">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-200">
-                    {t("settings.maxDuration")}
-                  </span>
-                  <div className="flex items-center gap-1">
+                  <span className="font-medium">{t("settings.maxDuration")}</span>
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       step="10"
-                      min="100"
+                      min="50"
                       max="500"
-                      className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-right font-bold text-sky-400 focus:outline-none focus:border-sky-400"
+                      className={`w-16 ${numInput}`}
                       value={maxStrafeMs()}
                       onInput={(e) =>
                         setMaxStrafeMs(parseInt(e.target.value, 10) || 250)
                       }
                     />
-                    <span className="text-xs text-slate-400">ms</span>
+                    <span className={desc}>ms</span>
                   </div>
                 </div>
                 <input
                   type="range"
-                  min="100"
+                  min="50"
                   max="500"
                   step="10"
-                  className="w-full accent-sky-500 cursor-pointer"
+                  className={`w-full ${accentCls} cursor-pointer`}
                   value={maxStrafeMs()}
                   onInput={(e) =>
                     setMaxStrafeMs(parseInt(e.target.value, 10) || 250)
                   }
                 />
-                <p className="text-[11px] text-slate-400 leading-tight">
-                  {t("settings.maxDurationDesc")}
-                </p>
+                <p className={desc}>{t("settings.maxDurationDesc")}</p>
               </div>
             </div>
 
-            {/* Section 3: Visual Goals */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
+            {/* Visual goals */}
+            <div className={section}>
               <div className="flex justify-between items-center">
-                <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider">
-                  {t("settings.goalsSection")}
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                <h3 className={sectionTitle}>{t("settings.goalsSection")}</h3>
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={goalsEnabled()}
                     onChange={(e) => setGoalsEnabled(e.target.checked)}
-                    className="accent-sky-500 rounded cursor-pointer"
+                    className={`${accentCls} cursor-pointer`}
                   />
                   <span>{t("settings.goalsEnable")}</span>
                 </label>
               </div>
 
               <Show when={goalsEnabled()}>
-                <div className="grid grid-cols-2 gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-700/50">
+                <div className="grid grid-cols-2 gap-x-8">
                   {/* Early goal */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
-                      <span className="text-xs font-medium text-slate-200">
-                        {t("settings.goalsEarly")}
-                      </span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <span style={{ color: colors().early }}>{STRAFE_SYMBOLS.early}</span>
+                      <span>{t("settings.goalsEarly")}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="number"
                         min="1"
                         max="100"
-                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 font-bold text-white focus:outline-none focus:border-sky-400 text-sm"
+                        className={`w-20 ${numInput}`}
                         value={earlyTargetMs()}
                         onInput={(e) =>
                           setEarlyTargetMs(parseInt(e.target.value, 10) || 15)
                         }
                       />
-                      <span className="text-xs text-slate-400">ms</span>
+                      <span className={desc}>ms</span>
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      {t("settings.goalsEarlyDesc")}
-                    </p>
+                    <p className={desc}>{t("settings.goalsEarlyDesc")}</p>
                   </div>
 
                   {/* Late goal */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="text-xs font-medium text-slate-200">
-                        {t("settings.goalsLate")}
-                      </span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <span style={{ color: colors().late }}>{STRAFE_SYMBOLS.late}</span>
+                      <span>{t("settings.goalsLate")}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="number"
                         min="1"
                         max="100"
-                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 font-bold text-white focus:outline-none focus:border-amber-400 text-sm"
+                        className={`w-20 ${numInput}`}
                         value={lateTargetMs()}
                         onInput={(e) =>
                           setLateTargetMs(parseInt(e.target.value, 10) || 20)
                         }
                       />
-                      <span className="text-xs text-slate-400">ms</span>
+                      <span className={desc}>ms</span>
                     </div>
-                    <p className="text-[10px] text-slate-400">
-                      {t("settings.goalsLateDesc")}
-                    </p>
+                    <p className={desc}>{t("settings.goalsLateDesc")}</p>
                   </div>
                 </div>
               </Show>
             </div>
 
-            {/* Rapid Trigger & Analog Keyboards Section */}
-            <div className="border-t border-slate-700/60 pt-4 space-y-3">
-              <label className="font-semibold text-slate-200 text-xs uppercase tracking-wider block">
-                ⚡ {t("settings.rapidTriggerSection")}
-              </label>
-              <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-700/50 space-y-2.5">
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  {t("settings.rapidTriggerDesc")}
-                </p>
-                <button
-                  type="button"
-                  className="w-full py-2 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                  onClick={applyRapidTriggerPreset}
-                >
+            {/* Rapid Trigger / analog keyboards */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.rapidTriggerSection")}</h3>
+              <p className={desc}>{t("settings.rapidTriggerDesc")}</p>
+              <div className="flex items-center gap-3">
+                <button type="button" className={btn} onClick={applyRapidTriggerPreset}>
                   {t("settings.rapidTriggerPresetBtn")}
                 </button>
                 <Show when={rapidTriggerNotice()}>
-                  <p className="text-[11px] text-emerald-400 font-semibold text-center animate-in fade-in">
-                    ✓ {t("settings.rapidTriggerApplied")}
-                  </p>
+                  <p className="text-[12px] font-semibold">{t("settings.rapidTriggerApplied")}</p>
                 </Show>
               </div>
+            </div>
+
+            {/* Ranks */}
+            <div className={section}>
+              <div className="flex items-baseline justify-between">
+                <h3 className={sectionTitle}>{t("settings.ranksSection")}</h3>
+                <button
+                  type="button"
+                  className="text-[12px] text-muted hover:text-ink underline underline-offset-4 cursor-pointer"
+                  onClick={() => setRanks(DEFAULT_RANKS.map((r) => ({ ...r })))}
+                >
+                  {t("settings.ranksReset")}
+                </button>
+              </div>
+              <p className={desc}>{t("settings.ranksDesc")}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <For each={ranks()}>
+                  {(rank, i) => (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        maxLength={24}
+                        className="flex-1 min-w-0 h-7 bg-card border border-line rounded-md px-2 text-[13px] text-ink focus:outline-none focus:border-accent"
+                        value={rank.name}
+                        onChange={(e) => updateRank(i(), { name: e.target.value })}
+                        aria-label={t("settings.rankName")}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className={`${numInput} w-14`}
+                        value={rank.min}
+                        disabled={i() === 0}
+                        onChange={(e) => updateRank(i(), { min: e.target.value })}
+                        aria-label={t("settings.rankMin")}
+                      />
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+
+            {/* Profile */}
+            <div className={section}>
+              <h3 className={sectionTitle}>{t("settings.profileSection")}</h3>
+              <p className={desc}>{t("settings.profileDesc")}</p>
+              <div className="flex items-center gap-2">
+                <button type="button" className={btnSm} onClick={handleExportProfile}>
+                  {t("settings.profileExport")}
+                </button>
+                <select
+                  className="flex-1 min-w-0 h-7 bg-card border border-line rounded-md px-1 text-[12px] text-ink focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
+                  value={selectedProfile()}
+                  disabled={profiles().length === 0}
+                  onChange={(e) => setSelectedProfile(e.target.value)}
+                  aria-label={t("settings.profileFile")}
+                >
+                  <Show when={profiles().length === 0}>
+                    <option value="">{t("settings.profileNone")}</option>
+                  </Show>
+                  <For each={profiles()}>{(name) => <option value={name}>{name}</option>}</For>
+                </select>
+                <button
+                  type="button"
+                  className={`${btnSm} disabled:opacity-40 disabled:pointer-events-none`}
+                  disabled={!selectedProfile()}
+                  onClick={handleImportProfile}
+                >
+                  {t("settings.profileImport")}
+                </button>
+              </div>
+              <Show when={profileStatus()}>
+                <p className="text-[12px] break-all">{profileStatus()}</p>
+              </Show>
+            </div>
+
+            {/* About */}
+            <div className={`${sectionBase} space-y-2`}>
+              <h3 className={sectionTitle}>{t("settings.aboutTitle")}</h3>
+              <p className={desc}>{t("settings.aboutText")}</p>
+              <button
+                type="button"
+                className="text-[13px] font-medium text-ink underline underline-offset-4 hover:text-accent cursor-pointer transition-colors"
+                onClick={async () => {
+                  try {
+                    await open("https://github.com/patrikzudel/strafe-evaluation");
+                  } catch (e) {
+                    console.error("Failed to open original project URL:", e);
+                  }
+                }}
+              >
+                {t("settings.aboutLink")}
+              </button>
             </div>
           </div>
 
           {/* Footer actions */}
-          <div className="px-6 py-4 border-t border-slate-700 bg-[#0f172a] flex justify-between items-center">
-            <button
-              type="button"
-              className="text-xs font-medium text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer"
-              onClick={handleReset}
-            >
+          <div className="h-14 shrink-0 px-5 border-t border-line flex justify-between items-center">
+            <button type="button" className={btn} onClick={handleReset}>
               {t("settings.defaultBtn")}
             </button>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="text-xs font-medium text-slate-300 hover:text-white px-4 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition-all cursor-pointer"
-                onClick={props.onClose}
-              >
+              <button type="button" className={btn} onClick={handleCancel}>
                 {t("settings.cancelBtn")}
               </button>
-              <button
-                type="button"
-                className="text-xs font-bold text-white px-5 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 shadow-md transition-all cursor-pointer"
-                onClick={handleSave}
-              >
+              <button type="button" className={btnPrimary} onClick={handleSave}>
                 {t("settings.saveBtn")}
               </button>
             </div>

@@ -1,6 +1,23 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import { formatKeyDisplay } from "../utils/settings";
+import { t } from "../i18n";
+
+function Keycap(props) {
+  return (
+    <div
+      className={`flex items-center justify-center rounded-md font-bold select-none transition-[transform,background-color] duration-75 ${
+        props.class || "w-11 h-11 text-[17px]"
+      } ${
+        props.pressed
+          ? "bg-key-on border-b border-key-edge translate-y-[3px]"
+          : "bg-key border-b-4 border-key-edge"
+      }`}
+    >
+      {props.children}
+    </div>
+  );
+}
 
 export default function KeyVisualizer(props) {
   const [aPressed, setAPressed] = createSignal(false);
@@ -64,99 +81,35 @@ export default function KeyVisualizer(props) {
     setTimeout(() => setDPressed(false), 800);
   }
 
+  const demoBtn = "text-left text-[12px] text-muted hover:text-ink underline-offset-2 hover:underline cursor-pointer";
+
   return (
-    <div className="flex group justify-center items-center w-full h-full select-none">
-      <div className="flex flex-col basis-0 flex-grow items-end opacity-0 -translate-x-2 duration-200 group-hover:opacity-100 group-hover:translate-x-0">
-        <button
-          type="button"
-          className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-sky-500 hover:bg-sky-400 text-white transition-all"
-          onClick={simulateEarly}
-        >
-          Early + Tir
-        </button>
-        <button
-          type="button"
-          className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-amber-500 hover:bg-amber-400 text-white transition-all"
-          onClick={simulateLate}
-        >
-          Late + Tir
-        </button>
-        <button
-          type="button"
-          className="shadow-md font-semibold text-xs px-2.5 w-24 py-1 my-0.5 cursor-pointer rounded-md hover:scale-105 bg-emerald-500 hover:bg-emerald-400 text-white transition-all"
-          onClick={simulatePerfect}
-        >
-          Perfect + Tir
-        </button>
-      </div>
-
-      <div className="flex justify-center items-center gap-6 px-4">
-        {/* Dynamic cluster */}
-        <div className="flex flex-col items-center gap-1">
-          {/* Row 1: Forward */}
-          <div
-            className={
-              "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center text-lg font-bold transition-all duration-75" +
-              (wPressed()
-                ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
-                : " bg-slate-800 text-slate-200")
-            }
-          >
-            {formatKeyDisplay(props.keys?.forward || "W")}
-          </div>
-
-          {/* Row 2: Left, Backward, Right */}
-          <div className="flex gap-1 text-lg font-bold">
-            <div
-              className={
-                "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center transition-all duration-75" +
-                (aPressed()
-                  ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
-                  : " bg-slate-800 text-slate-200")
-              }
-            >
-              {formatKeyDisplay(props.keys?.left || "A")}
-            </div>
-            <div
-              className={
-                "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center transition-all duration-75" +
-                (sPressed()
-                  ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
-                  : " bg-slate-800 text-slate-200")
-              }
-            >
-              {formatKeyDisplay(props.keys?.backward || "S")}
-            </div>
-            <div
-              className={
-                "flex border border-slate-700 shadow-md w-12 h-12 rounded-lg justify-center items-center transition-all duration-75" +
-                (dPressed()
-                  ? " bg-sky-500 translate-y-[2px] shadow-inner text-white border-sky-400"
-                  : " bg-slate-800 text-slate-200")
-              }
-            >
-              {formatKeyDisplay(props.keys?.right || "D")}
-            </div>
-          </div>
-        </div>
-
-        {/* Mouse 1 (Left click) visualizer */}
-        <div className="flex flex-col items-center justify-center">
-          <div
-            className={
-              "flex flex-col border border-slate-700 shadow-md w-14 h-20 rounded-t-2xl rounded-b-lg justify-center items-center text-xs font-bold transition-all duration-75" +
-              (m1Pressed()
-                ? " bg-emerald-500 translate-y-[3px] shadow-inner text-white border-emerald-400"
-                : " bg-slate-800 text-slate-200")
-            }
-          >
-            <span className="text-base">🖱️</span>
-            <span>M1</span>
-          </div>
+    <div className="flex items-center gap-5 select-none">
+      <div className="flex flex-col items-center gap-1">
+        <Keycap pressed={wPressed()}>{formatKeyDisplay(props.keys?.forward || "W")}</Keycap>
+        <div className="flex gap-1">
+          <Keycap pressed={aPressed()}>{formatKeyDisplay(props.keys?.left || "A")}</Keycap>
+          <Keycap pressed={sPressed()}>{formatKeyDisplay(props.keys?.backward || "S")}</Keycap>
+          <Keycap pressed={dPressed()}>{formatKeyDisplay(props.keys?.right || "D")}</Keycap>
         </div>
       </div>
 
-      <div className="basis-0 flex-grow min-w-[200px]" />
+      <Keycap pressed={m1Pressed()} class="w-12 h-[64px] text-[13px] rounded-t-2xl">
+        M1
+      </Keycap>
+
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[12px] font-semibold">{t("visualizer.examplesTitle")}</span>
+        <button type="button" className={demoBtn} onClick={simulateEarly}>
+          {t("visualizer.simulateEarly")}
+        </button>
+        <button type="button" className={demoBtn} onClick={simulateLate}>
+          {t("visualizer.simulateLate")}
+        </button>
+        <button type="button" className={demoBtn} onClick={simulatePerfect}>
+          {t("visualizer.simulatePerfect")}
+        </button>
+      </div>
     </div>
   );
 }

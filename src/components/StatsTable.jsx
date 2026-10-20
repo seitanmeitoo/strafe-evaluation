@@ -1,7 +1,8 @@
-import { createMemo } from "solid-js";
+import { createMemo, For } from "solid-js";
 import { getStats, draw_time } from "../utils/stats";
 import { getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
 import { t } from "../i18n";
+import { coefficientOfVariation, consistencyLabel } from "../utils/analysis";
 
 export default function StatsTable(props) {
   const early = createMemo(() => getStats(props.earlyStrafes || []));
@@ -16,74 +17,81 @@ export default function StatsTable(props) {
   const perfectCount = createMemo(() => (props.perfectStrafes || []).length);
   const colors = createMemo(() => getStrafeColors(props.colorblindMode));
 
+  const allDurations = () => [
+    ...(props.earlyStrafes || []),
+    ...(props.lateStrafes || []),
+    ...(props.perfectStrafes || []),
+  ];
+  const cvAll = createMemo(() => coefficientOfVariation(allDurations()));
+  const cvEarly = createMemo(() => coefficientOfVariation(props.earlyStrafes || []));
+  const cvLate = createMemo(() => coefficientOfVariation(props.lateStrafes || []));
+  const formatCv = (cv) => (cv == null ? "–" : `${Math.round(cv * 100)} %`);
+  const cvTitle = (cv) => (cv == null ? "" : t(`table.consistency_${consistencyLabel(cv)}`));
+
+  const rows = [
+    { label: "table.median", key: "median" },
+    { label: "table.average", key: "average" },
+    { label: "table.min", key: "min" },
+    { label: "table.max", key: "max" },
+    { label: "table.stdDeviation", key: "std_deviation" },
+  ];
+
   return (
-    <div className="flex flex-col justify-center items-center flex-grow w-full text-xs">
+    <div className="text-[13px]">
       <table className="w-full border-collapse">
-        <tbody className="text-center">
-          <tr className="border-b border-slate-700/40 text-slate-400 font-semibold">
-            <th className="py-1 text-left px-2">{t("table.metric")}</th>
-            <th className="w-16 py-1 text-slate-200">{t("table.all")}</th>
-            <th className="w-16 py-1 font-bold" style={{ color: colors().early }}>
+        <thead>
+          <tr className="text-right">
+            <th className="w-[38%]" />
+            <th className="py-1 font-semibold">{t("table.all")}</th>
+            <th className="py-1 font-semibold" style={{ color: colors().early }}>
               {STRAFE_SYMBOLS.early} {t("table.early")}
             </th>
-            <th className="w-16 py-1 font-bold" style={{ color: colors().late }}>
+            <th className="py-1 font-semibold" style={{ color: colors().late }}>
               {STRAFE_SYMBOLS.late} {t("table.late")}
             </th>
           </tr>
-          <tr className="border-b border-slate-700/20">
-            <th className="py-1 text-left px-2 text-slate-400 font-medium">{t("table.median")}</th>
-            <td className="py-1 font-mono text-slate-200">{draw_time(alls().median)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().early }}>{draw_time(early().median)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().late }}>{draw_time(late().median)}</td>
-          </tr>
-          <tr className="border-b border-slate-700/20">
-            <th className="py-1 text-left px-2 text-slate-400 font-medium">{t("table.average")}</th>
-            <td className="py-1 font-mono text-slate-200">{draw_time(alls().average)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().early }}>{draw_time(early().average)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().late }}>{draw_time(late().average)}</td>
-          </tr>
-          <tr className="border-b border-slate-700/20">
-            <th className="py-1 text-left px-2 text-slate-400 font-medium">{t("table.min")}</th>
-            <td className="py-1 font-mono text-slate-200">{draw_time(alls().min)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().early }}>{draw_time(early().min)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().late }}>{draw_time(late().min)}</td>
-          </tr>
-          <tr className="border-b border-slate-700/20">
-            <th className="py-1 text-left px-2 text-slate-400 font-medium">{t("table.max")}</th>
-            <td className="py-1 font-mono text-slate-200">{draw_time(alls().max)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().early }}>{draw_time(early().max)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().late }}>{draw_time(late().max)}</td>
-          </tr>
-          <tr className="border-b border-slate-700/20">
-            <th className="py-1 text-left px-2 text-slate-400 font-medium">{t("table.stdDeviation")}</th>
-            <td className="py-1 font-mono text-slate-200">{draw_time(alls().std_deviation)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().early }}>{draw_time(early().std_deviation)}</td>
-            <td className="py-1 font-mono" style={{ color: colors().late }}>{draw_time(late().std_deviation)}</td>
+        </thead>
+        <tbody className="text-right">
+          <For each={rows}>
+            {(row) => (
+              <tr>
+                <th className="py-[3px] text-left font-normal text-muted">{t(row.label)}</th>
+                <td className="py-[3px]">{draw_time(alls()[row.key])}</td>
+                <td className="py-[3px]">{draw_time(early()[row.key])}</td>
+                <td className="py-[3px]">{draw_time(late()[row.key])}</td>
+              </tr>
+            )}
+          </For>
+          <tr>
+            <th className="py-[3px] text-left font-normal text-muted cursor-help" title={t("table.consistencyHint")}>
+              {t("table.consistency")}
+            </th>
+            <td className="py-[3px]" title={cvTitle(cvAll())}>{formatCv(cvAll())}</td>
+            <td className="py-[3px]" title={cvTitle(cvEarly())}>{formatCv(cvEarly())}</td>
+            <td className="py-[3px]" title={cvTitle(cvLate())}>{formatCv(cvLate())}</td>
           </tr>
           <tr>
-            <th className="py-1 text-left px-2 text-slate-400 font-medium">{t("table.samples")}</th>
-            <td className="py-1 font-bold text-slate-200">{alls().samples}</td>
-            <td className="py-1 font-bold" style={{ color: colors().early }}>{early().samples}</td>
-            <td className="py-1 font-bold" style={{ color: colors().late }}>{late().samples}</td>
+            <th className="py-[3px] text-left font-normal text-muted">{t("table.samples")}</th>
+            <td className="py-[3px] font-semibold">{alls().samples}</td>
+            <td className="py-[3px] font-semibold">{early().samples}</td>
+            <td className="py-[3px] font-semibold">{late().samples}</td>
           </tr>
         </tbody>
       </table>
 
-      {/* Highlighted Perfect counter */}
-      <div
-        className="mt-3 py-1.5 px-4 rounded-xl flex items-center gap-2 border"
-        style={{
-          "background-color": `${colors().perfect}1a`,
-          "border-color": `${colors().perfect}4d`,
-        }}
-      >
-        <span className="text-lg" style={{ color: colors().perfect }}>{STRAFE_SYMBOLS.perfect}</span>
-        <span
-          className="font-extrabold text-sm tracking-wide"
+      <div className="mt-2 flex items-baseline justify-between">
+        <p
+          className="font-bold italic cursor-help"
           style={{ color: colors().perfect }}
+          title={t("dashboard.perfectInfoTitle")}
         >
-          {t("table.perfect")} : {perfectCount()}x
-        </span>
+          {STRAFE_SYMBOLS.perfect} {t("dashboard.perfectCount", { count: perfectCount() })}
+        </p>
+        {cvAll() != null && (
+          <p className="text-[12px] text-muted cursor-help" title={t("table.consistencyHint")}>
+            {t(`table.consistency_${consistencyLabel(cvAll())}`)}
+          </p>
+        )}
       </div>
     </div>
   );

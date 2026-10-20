@@ -49,18 +49,24 @@ export function getStats(duration_array) {
   };
 }
 
-export function getOccurance(duration_array) {
+export function getOccurance(duration_array, maxStrafeMs = 250) {
+  const maxMs = typeof maxStrafeMs === "number" && maxStrafeMs > 0 ? maxStrafeMs : 250;
+  const binCount = Math.floor(maxMs / 5) + 1;
+
   if (!duration_array || duration_array.length === 0) {
     return [0];
   }
 
-  const out = new Array(41).fill(0);
+  const out = new Array(binCount).fill(0);
   duration_array.forEach((x) => {
     const n = Math.ceil(x / 5000);
     if (n >= 0 && n < out.length) {
       out[n] += 1;
+    } else if (n >= out.length && out.length > 0) {
+      out[out.length - 1] += 1;
     }
   });
 
   return out;
 }
+

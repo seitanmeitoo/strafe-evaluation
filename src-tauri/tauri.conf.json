@@ -6,8 +6,8 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "PatrikZeros-Strafe-Evaluation",
-    "version": "1.1.0"
+    "productName": "Strafe-Evolution",
+    "version": "1.2.0"
   },
   "tauri": {
     "allowlist": {
@@ -17,21 +17,26 @@
         "open": true
       },
       "window": {
-        "all": true
+        "all": false,
+        "setPosition": true,
+        "setSize": true,
+        "startDragging": true
       }
     },
     "windows": [
       {
         "label": "main",
-        "title": "PatrikZero's Strafe Evaluation",
+        "title": "Strafe Evolution",
         "width": 800,
         "height": 620,
-        "resizable": false
+        "minWidth": 800,
+        "minHeight": 620,
+        "resizable": true
       },
       {
         "label": "overlay",
         "url": "index.html?overlay=true",
-        "title": "Strafe Overlay",
+        "title": "Strafe Evolution Overlay",
         "width": 270,
         "height": 135,
         "resizable": false,
@@ -43,7 +48,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'"
     },
     "bundle": {
       "active": true,

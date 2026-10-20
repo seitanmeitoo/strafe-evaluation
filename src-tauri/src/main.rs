@@ -3,6 +3,7 @@
 
 mod keyboard;
 mod overlay;
+mod storage;
 mod tracker;
 
 use keyboard::{ActiveKeyBindings, KeyboardLayout, MonitoredKeys};
@@ -13,6 +14,7 @@ use overlay::{
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
+use tauri::Manager;
 use tracker::{
     check_pending_timeout, handle_directional_keys, handle_key_presses, handle_key_releases,
     handle_mouse_input, handle_overlap_eval, GameState, TrackerState,
@@ -25,7 +27,7 @@ fn set_require_shot(require_shot: bool, state: tauri::State<Arc<GameState>>) {
 
 #[tauri::command]
 fn set_monitored_keys(keys: MonitoredKeys, state: tauri::State<Arc<GameState>>) -> Result<(), String> {
-    let active = ActiveKeyBindings::from_monitored_keys(keys);
+    let active = ActiveKeyBindings::from_monitored_keys(keys)?;
     if let Ok(mut lock) = state.key_bindings.write() {
         *lock = active;
         Ok(())
@@ -36,8 +38,18 @@ fn set_monitored_keys(keys: MonitoredKeys, state: tauri::State<Arc<GameState>>) 
 
 #[tauri::command]
 fn set_thresholds(perfect_threshold_ms: f64, max_strafe_ms: f64, state: tauri::State<Arc<GameState>>) {
-    let perfect_micros = (perfect_threshold_ms.max(0.0) * 1000.0).round() as u64;
-    let max_strafe_micros = (max_strafe_ms.max(10.0) * 1000.0).round() as u64;
+    let perfect_ms = if perfect_threshold_ms.is_nan() {
+        1.6
+    } else {
+        perfect_threshold_ms.clamp(0.0, 10.0)
+    };
+    let max_ms = if max_strafe_ms.is_nan() {
+        250.0
+    } else {
+        max_strafe_ms.clamp(50.0, 500.0)
+    };
+    let perfect_micros = (perfect_ms * 1000.0).round() as u64;
+    let max_strafe_micros = (max_ms * 1000.0).round() as u64;
     state.perfect_threshold_micros.store(perfect_micros, Ordering::Relaxed);
     state.max_eval_micros.store(max_strafe_micros, Ordering::Relaxed);
 }
@@ -112,6 +124,50 @@ fn get_overlay_state(state: tauri::State<Arc<OverlayState>>) -> Result<OverlaySt
     })
 }
 
+fn run_tracker_loop(
+    handle: &tauri::AppHandle,
+    game_state: &Arc<GameState>,
+    overlay_state: &Arc<OverlayState>,
+) {
+    let mut state = TrackerState::default();
+    let mut hotkey_tracker = HotkeyTracker::default();
+
+    loop {
+        std::thread::sleep(Duration::from_micros(500));
+
+        let (is_left_down, is_right_down, is_forward_down, is_backward_down, is_diagonal) = {
+            if let Ok(bindings) = game_state.key_bindings.read() {
+                (
+                    bindings.is_left_pressed(),
+                    bindings.is_right_pressed(),
+                    bindings.is_forward_pressed(),
+                    bindings.is_backward_pressed(),
+                    bindings.is_diagonal_pressed(),
+                )
+            } else {
+                (false, false, false, false, false)
+            }
+        };
+
+        let is_mouse_down = keyboard::is_mouse1_pressed();
+
+        handle_directional_keys(is_forward_down, is_backward_down, &mut state, handle);
+        handle_mouse_input(is_mouse_down, &mut state, game_state, handle);
+        handle_key_releases(is_left_down, is_right_down, &mut state, handle);
+        handle_key_presses(
+            is_left_down,
+            is_right_down,
+            is_diagonal,
+            &mut state,
+            game_state,
+            handle,
+        );
+        handle_overlap_eval(is_diagonal, &mut state, game_state, handle);
+        check_pending_timeout(game_state, handle);
+        check_overlay_hotkeys(handle, overlay_state, &mut hotkey_tracker);
+    }
+}
+
 fn main() {
     let game_state = Arc::new(GameState::new());
     let thread_game_state = Arc::clone(&game_state);
@@ -130,48 +186,65 @@ fn main() {
             toggle_overlay,
             set_overlay_click_through,
             toggle_overlay_lock_cmd,
-            get_overlay_state
+            get_overlay_state,
+            storage::export_profile,
+            storage::list_profiles,
+            storage::read_profile,
+            storage::save_image
         ])
+        .on_window_event(|event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event.event() {
+                let window = event.window();
+                match window.label() {
+                    "overlay" => {
+                        api.prevent_close();
+                        if let Some(state) = window.try_state::<Arc<OverlayState>>() {
+                            let _ = set_overlay_visibility(&window.app_handle(), &state, false);
+                        }
+                    }
+                    "main" => {
+                        window.app_handle().exit(0);
+                    }
+                    _ => {}
+                }
+            }
+        })
         .setup(move |app| {
             let handle = app.handle();
 
             std::thread::spawn(move || {
-                let mut state = TrackerState::default();
-                let mut hotkey_tracker = HotkeyTracker::default();
-
+                let mut restarts = 0;
                 loop {
-                    std::thread::sleep(Duration::from_micros(500));
+                    let h = handle.clone();
+                    let gs = Arc::clone(&thread_game_state);
+                    let os = Arc::clone(&thread_overlay_state);
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                        run_tracker_loop(&h, &gs, &os);
+                    }));
 
-                    let (is_left_down, is_right_down, is_forward_down, is_backward_down, is_diagonal) = {
-                        if let Ok(bindings) = thread_game_state.key_bindings.read() {
-                            (
-                                bindings.is_left_pressed(),
-                                bindings.is_right_pressed(),
-                                bindings.is_forward_pressed(),
-                                bindings.is_backward_pressed(),
-                                bindings.is_diagonal_pressed(),
-                            )
-                        } else {
-                            (false, false, false, false, false)
+                    match result {
+                        Ok(()) => {
+                            break;
                         }
-                    };
-
-                    let is_mouse_down = keyboard::is_mouse1_pressed();
-
-                    handle_directional_keys(is_forward_down, is_backward_down, &mut state, &handle);
-                    handle_mouse_input(is_mouse_down, &mut state, &thread_game_state, &handle);
-                    handle_key_releases(is_left_down, is_right_down, &mut state, &handle);
-                    handle_key_presses(
-                        is_left_down,
-                        is_right_down,
-                        is_diagonal,
-                        &mut state,
-                        &thread_game_state,
-                        &handle,
-                    );
-                    handle_overlap_eval(is_diagonal, &mut state, &thread_game_state, &handle);
-                    check_pending_timeout(&thread_game_state, &handle);
-                    check_overlay_hotkeys(&handle, &thread_overlay_state, &mut hotkey_tracker);
+                        Err(e) => {
+                            if restarts < 5 {
+                                restarts += 1;
+                                eprintln!("Tracker loop panicked: {:?}. Restarting (attempt {}/5)...", e, restarts);
+                                {
+                                    let mut lock = thread_game_state
+                                        .pending_strafe
+                                        .lock()
+                                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                                    *lock = None;
+                                }
+                                std::thread::sleep(Duration::from_secs(1));
+                            } else {
+                                eprintln!("Tracker loop panicked 6 times (5 restarts exhausted). Terminating tracker thread.");
+                                let _ = handle.emit_all("tracker-stopped", serde_json::json!({ "restarts": 5 }));
+                                break;
+                            }
+                        }
+                    }
                 }
             });
 

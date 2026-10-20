@@ -1,5 +1,6 @@
 /* @refresh reload */
 import { render } from "solid-js/web";
+import "@fontsource-variable/hanken-grotesk";
 import App from "./App";
 import OverlayApp from "./components/OverlayApp";
 

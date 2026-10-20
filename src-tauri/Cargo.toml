@@ -1,8 +1,8 @@
 [package]
 name = "strafe-eval"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "1.2.0"
+description = "Counter-strafe training tool for Counter-Strike 2"
+authors = ["Seitan_Meitoo <82282083+seitanmeitoo@users.noreply.github.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 tauri-build = { version = "1", features = [] }
 
 [dependencies]
-tauri = { version = "1", features = ["shell-open", "window-all"] }
+tauri = { version = "1", features = ["shell-open", "window-set-position", "window-set-size","window-start-dragging"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 inputbot = "0.6"

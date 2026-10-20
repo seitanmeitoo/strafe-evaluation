@@ -113,52 +113,60 @@ pub fn parse_key_token(s: &str) -> Option<KeybdKey> {
 }
 
 impl ActiveKeyBindings {
-    pub fn from_monitored_keys(raw: MonitoredKeys) -> Self {
+    pub fn from_monitored_keys(raw: MonitoredKeys) -> Result<Self, String> {
         use inputbot::KeybdKey::*;
 
-        let mut left_keys = Vec::new();
-        if let Some(k) = parse_key_token(&raw.left) {
-            left_keys.push(k);
+        let left_key = parse_key_token(&raw.left)
+            .ok_or_else(|| format!("Unrecognized key for Left: {}", raw.left))?;
+        let right_key = parse_key_token(&raw.right)
+            .ok_or_else(|| format!("Unrecognized key for Right: {}", raw.right))?;
+        let forward_key = parse_key_token(&raw.forward)
+            .ok_or_else(|| format!("Unrecognized key for Forward: {}", raw.forward))?;
+        let backward_key = parse_key_token(&raw.backward)
+            .ok_or_else(|| format!("Unrecognized key for Backward: {}", raw.backward))?;
+
+        if raw.left.eq_ignore_ascii_case(&raw.right)
+            || raw.left.eq_ignore_ascii_case(&raw.forward)
+            || raw.left.eq_ignore_ascii_case(&raw.backward)
+            || raw.right.eq_ignore_ascii_case(&raw.forward)
+            || raw.right.eq_ignore_ascii_case(&raw.backward)
+            || raw.forward.eq_ignore_ascii_case(&raw.backward)
+        {
+            return Err("Two directions cannot use the same key".to_string());
         }
+
+        // Legacy alias: arrow keys associated by default with WASD and ZQSD layouts
+        let mut left_keys = vec![left_key];
         if (raw.left.eq_ignore_ascii_case("A") || raw.left.eq_ignore_ascii_case("Q"))
             && !left_keys.contains(&LeftKey)
         {
             left_keys.push(LeftKey);
         }
 
-        let mut right_keys = Vec::new();
-        if let Some(k) = parse_key_token(&raw.right) {
-            right_keys.push(k);
-        }
+        let mut right_keys = vec![right_key];
         if raw.right.eq_ignore_ascii_case("D") && !right_keys.contains(&RightKey) {
             right_keys.push(RightKey);
         }
 
-        let mut forward_keys = Vec::new();
-        if let Some(k) = parse_key_token(&raw.forward) {
-            forward_keys.push(k);
-        }
+        let mut forward_keys = vec![forward_key];
         if (raw.forward.eq_ignore_ascii_case("W") || raw.forward.eq_ignore_ascii_case("Z"))
             && !forward_keys.contains(&UpKey)
         {
             forward_keys.push(UpKey);
         }
 
-        let mut backward_keys = Vec::new();
-        if let Some(k) = parse_key_token(&raw.backward) {
-            backward_keys.push(k);
-        }
+        let mut backward_keys = vec![backward_key];
         if raw.backward.eq_ignore_ascii_case("S") && !backward_keys.contains(&DownKey) {
             backward_keys.push(DownKey);
         }
 
-        Self {
+        Ok(Self {
             left_keys,
             right_keys,
             forward_keys,
             backward_keys,
             raw,
-        }
+        })
     }
 
     pub fn is_left_pressed(&self) -> bool {
@@ -199,7 +207,7 @@ impl Default for ActiveKeyBindings {
                 backward: "S".to_string(),
             },
         };
-        Self::from_monitored_keys(raw)
+        Self::from_monitored_keys(raw).expect("Default key bindings must be valid")
     }
 }
 

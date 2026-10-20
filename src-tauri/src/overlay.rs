@@ -7,32 +7,19 @@ pub struct OverlayStatePayload {
     pub is_locked: bool,
 }
 
+#[derive(Default)]
 pub struct OverlayState {
     pub is_locked: AtomicBool,
     pub is_open: AtomicBool,
 }
 
-impl Default for OverlayState {
-    fn default() -> Self {
-        Self {
-            is_locked: AtomicBool::new(false),
-            is_open: AtomicBool::new(false),
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct HotkeyTracker {
     pub prev_lock_combo: bool,
     pub prev_toggle_combo: bool,
-}
-
-impl Default for HotkeyTracker {
-    fn default() -> Self {
-        Self {
-            prev_lock_combo: false,
-            prev_toggle_combo: false,
-        }
-    }
+    pub prev_drill_cycle: bool,
+    pub prev_drill_toggle: bool,
+    pub prev_drill_reset: bool,
 }
 
 pub fn get_overlay_window(handle: &AppHandle) -> Option<Window> {
@@ -66,25 +53,9 @@ pub fn set_click_through(window: &Window, ignore: bool) -> Result<(), String> {
 }
 
 pub fn ensure_overlay_window(handle: &AppHandle) -> Result<Window, String> {
-    if let Some(w) = handle.get_window("overlay") {
-        Ok(w)
-    } else {
-        tauri::WindowBuilder::new(
-            handle,
-            "overlay",
-            tauri::WindowUrl::App("index.html?overlay=true".into()),
-        )
-        .title("Strafe Overlay")
-        .inner_size(270.0, 135.0)
-        .resizable(false)
-        .decorations(false)
-        .always_on_top(true)
-        .transparent(true)
-        .skip_taskbar(true)
-        .visible(false)
-        .build()
-        .map_err(|e| format!("Failed to create overlay window: {}", e))
-    }
+    handle
+        .get_window("overlay")
+        .ok_or_else(|| "Overlay window not found".to_string())
 }
 
 pub fn set_overlay_visibility(
@@ -153,6 +124,9 @@ pub fn check_overlay_hotkeys(
     let f11_down = F11Key.is_pressed();
     let alt_down = LAltKey.is_pressed() || RAltKey.is_pressed();
     let o_down = OKey.is_pressed();
+    let f12_down = F12Key.is_pressed();
+    let f10_down = F10Key.is_pressed();
+    let f9_down = F9Key.is_pressed();
 
     // Ctrl + F11: Toggle Click-Through Lock
     let lock_combo = ctrl_down && f11_down;
@@ -173,4 +147,18 @@ pub fn check_overlay_hotkeys(
         let _ = toggle_overlay_visibility(handle, state);
     }
     tracker.prev_toggle_combo = toggle_combo;
+
+    // Training drills: the front end owns the drill, Rust only reports the shortcut.
+    // Function keys are used so that no shortcut collides with a movement or reload key.
+    let drill_shortcuts = [
+        (ctrl_down && f12_down, &mut tracker.prev_drill_cycle, "cycle"),
+        (ctrl_down && f10_down, &mut tracker.prev_drill_toggle, "toggle"),
+        (ctrl_down && f9_down, &mut tracker.prev_drill_reset, "reset"),
+    ];
+    for (combo, prev, action) in drill_shortcuts {
+        if combo && !*prev {
+            let _ = handle.emit_all("drill-hotkey", serde_json::json!({ "action": action }));
+        }
+        *prev = combo;
+    }
 }

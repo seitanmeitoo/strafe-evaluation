@@ -1,11 +1,13 @@
-import { createSignal, createMemo, onMount, onCleanup } from "solid-js";
-import { listen } from "@tauri-apps/api/event";
+import { createSignal, createMemo, createEffect, onMount, onCleanup, Show } from "solid-js";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
-import { appWindow, PhysicalPosition } from "@tauri-apps/api/window";
+import { appWindow, PhysicalPosition, LogicalSize, availableMonitors } from "@tauri-apps/api/window";
 import { calculateSpeedAtShot } from "../utils/cs2Physics";
 import { playStrafeSound } from "../utils/audio";
-import { loadSettings, getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
-import { t, setLanguage } from "../i18n";
+import { loadSettings, saveSettings, getStrafeColors, STRAFE_SYMBOLS, formatKeyDisplay } from "../utils/settings";
+import { t } from "../i18n";
+import { CloseIcon, LockIcon } from "./Icons";
+import DrillPanel from "./DrillPanel";
 import "../App.css";
 
 const OPACITY_STEPS = [0.95, 0.8, 0.6, 0.4];
@@ -16,10 +18,57 @@ export default function OverlayApp() {
   const [totalShots, setTotalShots] = createSignal(0);
   const [accurateShots, setAccurateShots] = createSignal(0);
   const [isLocked, setIsLocked] = createSignal(false);
-  const [opacity, setOpacity] = createSignal(0.9);
+  const [isVisible, setIsVisible] = createSignal(true);
   const [settings, setSettings] = createSignal(loadSettings());
+  const [drillView, setDrillView] = createSignal({ mode: "normal", status: "idle", progress: null, result: null });
+  const isDrillMode = () => drillView().mode !== "normal";
 
+  const opacity = () => settings().overlay?.opacity ?? 0.85;
   const colors = createMemo(() => getStrafeColors(settings().colorblindMode));
+  const leftKey = () => formatKeyDisplay(settings().keys?.left || "A");
+  const rightKey = () => formatKeyDisplay(settings().keys?.right || "D");
+
+  const typeColor = (type) =>
+    type === "Perfect" ? colors().perfect : type === "Early" ? colors().early : colors().late;
+  const typeSymbol = (type) =>
+    type === "Perfect" ? STRAFE_SYMBOLS.perfect : type === "Early" ? STRAFE_SYMBOLS.early : STRAFE_SYMBOLS.late;
+
+  const isMini = () => settings().overlay?.compact === true;
+
+  // Window size: compact widget, taller while a drill mode is selected, or the normal HUD.
+  createEffect(() => {
+    const [width, height] = isMini() ? [150, 40] : isDrillMode() ? [270, 180] : [270, 135];
+    appWindow.setSize(new LogicalSize(width, height)).catch((e) => console.warn("Could not resize overlay:", e));
+  });
+
+  function toggleMini() {
+    const updated = { ...settings(), overlay: { ...settings().overlay, compact: !isMini() } };
+    setSettings(updated);
+    saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
+  }
+
+  // Main figure of the compact widget while a drill is selected (null: show the last strafe).
+  const miniDrillText = () => {
+    const v = drillView();
+    if (v.mode === "normal") return null;
+    if (v.status === "finished" && v.result) return t("drills.score", { score: v.result.score });
+    if (v.status !== "running" || !v.progress) return null;
+    const p = v.progress;
+    if (v.mode === "timed") {
+      const s = Math.max(0, p.remainingSec || 0);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    }
+    if (v.mode === "focus") return `${p.counted} / ${p.target}`;
+    if (v.mode === "streak") return `${STRAFE_SYMBOLS.perfect} ${p.streak} / ${p.target}`;
+    if (v.mode === "warmup") return `${p.phaseIndex + 1}/${p.phaseCount}  ${p.phaseDone} / ${p.phase?.count}`;
+    return null;
+  };
+
+  // Follow the app theme (each window has its own <html>).
+  createEffect(() => {
+    document.documentElement.classList.toggle("dark", settings().theme === "dark");
+  });
 
   const lastEvaluation = createMemo(() => {
     const s = lastStrafe();
@@ -47,12 +96,16 @@ export default function OverlayApp() {
     const current = opacity();
     const nextIdx = (OPACITY_STEPS.findIndex((s) => Math.abs(s - current) < 0.05) + 1) % OPACITY_STEPS.length;
     const next = OPACITY_STEPS[nextIdx];
-    setOpacity(next);
-    try {
-      localStorage.setItem("strafe_overlay_opacity", String(next));
-    } catch (e) {
-      // Ignore storage errors
-    }
+    const updated = {
+      ...settings(),
+      overlay: {
+        ...settings().overlay,
+        opacity: next,
+      },
+    };
+    setSettings(updated);
+    saveSettings(updated);
+    emit("settings-changed", updated).catch(() => {});
   }
 
   async function handleClose() {
@@ -76,33 +129,39 @@ export default function OverlayApp() {
 
     const currentSettings = loadSettings();
     setSettings(currentSettings);
-    if (currentSettings.language) {
-      setLanguage(currentSettings.language);
-    }
 
-    // Load saved opacity
-    try {
-      const savedOpacity = localStorage.getItem("strafe_overlay_opacity");
-      if (savedOpacity) {
-        const parsed = parseFloat(savedOpacity);
-        if (!isNaN(parsed) && parsed >= 0.3 && parsed <= 1.0) {
-          setOpacity(parsed);
-        }
-      }
-    } catch (e) {
-      // Ignore
-    }
-
-    // Restore saved window position
+    // Restore saved window position with off-screen boundary check
     const restorePosition = async () => {
       try {
         const savedPos = localStorage.getItem("strafe_overlay_position");
-        if (savedPos) {
-          const { x, y } = JSON.parse(savedPos);
-          if (typeof x === "number" && typeof y === "number") {
-            await appWindow.setPosition(new PhysicalPosition(x, y));
+        if (!savedPos) return;
+
+        const { x, y } = JSON.parse(savedPos);
+        if (typeof x !== "number" || typeof y !== "number") return;
+
+        const monitors = await availableMonitors();
+        if (monitors && monitors.length > 0) {
+          const isVisibleOnAny = monitors.some((m) => {
+            const monLeft = m.position.x;
+            const monRight = m.position.x + m.size.width;
+            const monTop = m.position.y;
+            const monBottom = m.position.y + m.size.height;
+
+            return (
+              x + 50 > monLeft &&
+              x < monRight &&
+              y + 30 > monTop &&
+              y < monBottom
+            );
+          });
+
+          if (!isVisibleOnAny) {
+            console.warn("Saved overlay position is off-screen, resetting:", { x, y });
+            return;
           }
         }
+
+        await appWindow.setPosition(new PhysicalPosition(x, y));
       } catch (e) {
         console.warn("Could not restore overlay position:", e);
       }
@@ -115,6 +174,7 @@ export default function OverlayApp() {
         const state = await invoke("get_overlay_state");
         if (state) {
           setIsLocked(Boolean(state.is_locked));
+          setIsVisible(Boolean(state.is_open));
         }
       } catch (e) {
         console.warn("Failed to get overlay state:", e);
@@ -124,8 +184,12 @@ export default function OverlayApp() {
 
     let unlistenStrafe;
     let unlistenLock;
+    let unlistenVis;
+    let unlistenSettings;
     let unlistenReset;
     let unlistenMove;
+    let unlistenDrill;
+    let moveTimeout = null;
 
     const setupListeners = async () => {
       unlistenStrafe = await listen("strafe", (event) => {
@@ -157,8 +221,8 @@ export default function OverlayApp() {
           }
         }
 
-        // Audio feedback
-        if (settings().audio?.enabled) {
+        // Audio feedback (only play if overlay is currently visible)
+        if (settings().audio?.enabled && isVisible()) {
           playStrafeSound(strafe.type, settings().audio?.volume ?? 0.5);
         }
       });
@@ -168,219 +232,211 @@ export default function OverlayApp() {
         setIsLocked(locked);
       });
 
+      unlistenVis = await listen("overlay-visibility-toggled", (event) => {
+        const visible = Boolean(event.payload?.visible);
+        setIsVisible(visible);
+      });
+
+      unlistenSettings = await listen("settings-changed", (event) => {
+        const newSettings = event.payload || loadSettings();
+        setSettings(newSettings);
+      });
+
       unlistenReset = await listen("strafe-reset", () => {
         handleReset();
       });
 
+      // Drills run in the main window; the overlay only shows their state.
+      unlistenDrill = await listen("drill-state", (event) => {
+        if (event.payload) setDrillView(event.payload);
+      });
+      emit("drill-state-request", {}).catch(() => {});
+
+      // Debounced position saving (300ms)
       unlistenMove = await appWindow.onMoved(({ payload: position }) => {
-        try {
-          localStorage.setItem(
-            "strafe_overlay_position",
-            JSON.stringify({ x: position.x, y: position.y })
-          );
-        } catch (e) {
-          // Ignore
-        }
+        if (moveTimeout) clearTimeout(moveTimeout);
+        moveTimeout = setTimeout(() => {
+          try {
+            localStorage.setItem(
+              "strafe_overlay_position",
+              JSON.stringify({ x: position.x, y: position.y })
+            );
+          } catch (e) {
+            // Ignore
+          }
+        }, 300);
       });
     };
 
     setupListeners();
 
     onCleanup(() => {
+      if (moveTimeout) clearTimeout(moveTimeout);
       if (typeof unlistenStrafe === "function") unlistenStrafe();
       if (typeof unlistenLock === "function") unlistenLock();
+      if (typeof unlistenVis === "function") unlistenVis();
+      if (typeof unlistenSettings === "function") unlistenSettings();
       if (typeof unlistenReset === "function") unlistenReset();
       if (typeof unlistenMove === "function") unlistenMove();
+      if (typeof unlistenDrill === "function") unlistenDrill();
       document.documentElement.classList.remove("overlay-mode");
       document.body.classList.remove("overlay-mode");
     });
   });
 
+  const iconBtn =
+    "h-6 min-w-6 px-1 rounded border border-line bg-card text-muted hover:text-ink text-[11px] flex items-center justify-center cursor-pointer";
+
+  const mini = (
+    <div className="w-[150px] h-[40px] select-none p-1 overflow-hidden" style={{ opacity: opacity() }}>
+      <div
+        className={`w-full h-full rounded-lg pl-2 pr-1 flex items-center gap-1.5 bg-surface text-ink border hud-glass ${
+          isLocked() ? "border-accent" : "border-line"
+        }`}
+      >
+        <div
+          data-tauri-drag-region
+          className="flex-1 min-w-0 flex items-center gap-1.5 cursor-move text-[12px] font-bold whitespace-nowrap overflow-hidden"
+          title={t("overlayApp.dragTooltip")}
+        >
+          <Show
+            when={miniDrillText()}
+            fallback={
+              <Show when={lastStrafe()} fallback={<span className="pointer-events-none text-muted font-semibold">{t("overlayApp.miniWaiting")}</span>}>
+                <span className="pointer-events-none" style={{ color: typeColor(lastStrafe().type) }}>
+                  {typeSymbol(lastStrafe().type)}{" "}
+                  {lastStrafe().type === "Perfect" ? t("table.perfect") : `${Math.round(lastStrafe().duration / 1000)} ms`}
+                </span>
+                <span
+                  className="pointer-events-none text-[11px]"
+                  style={{ color: perfectStreak() > 0 ? colors().perfect : undefined }}
+                >
+                  {STRAFE_SYMBOLS.perfect} {perfectStreak()}
+                </span>
+              </Show>
+            }
+          >
+            <span className="pointer-events-none">{miniDrillText()}</span>
+          </Show>
+        </div>
+        <button
+          type="button"
+          onClick={toggleMini}
+          className="h-6 w-6 shrink-0 rounded border border-line bg-card text-muted hover:text-ink text-[12px] leading-none flex items-center justify-center cursor-pointer"
+          title={t("overlayApp.expandTooltip")}
+          aria-label={t("overlayApp.expandTooltip")}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+
   return (
+    <Show when={!isMini()} fallback={mini}>
     <div
-      className="w-[270px] h-[135px] select-none p-1.5 overflow-hidden flex flex-col justify-between"
+      className={`w-[270px] select-none p-1.5 overflow-hidden ${isDrillMode() ? "h-[180px]" : "h-[135px]"}`}
       style={{ opacity: opacity() }}
     >
       <div
-        className={`w-full h-full rounded-2xl p-2.5 flex flex-col justify-between hud-glass border transition-all duration-150 ${
-          isLocked()
-            ? "bg-slate-950/85 border-amber-500/40 shadow-lg shadow-amber-950/20"
-            : "bg-slate-900/90 border-slate-700/70 shadow-2xl"
+        className={`w-full h-full rounded-xl px-3 py-2 flex flex-col justify-between bg-surface text-ink border hud-glass ${
+          isLocked() ? "border-accent" : "border-line"
         }`}
       >
-        {/* Top bar: Drag region & Controls */}
-        <div className="flex items-center justify-between text-xs text-slate-300">
-          {/* Drag Handle */}
+        {/* Top bar: drag handle, Perfect streak and controls */}
+        <div className="flex items-center gap-2">
           <div
             data-tauri-drag-region
-            className="flex items-center gap-1.5 cursor-move font-semibold text-[11px] text-slate-400 hover:text-slate-200 tracking-wide select-none"
+            className="flex-1 min-w-0 flex items-center gap-1.5 cursor-move text-[11px] font-semibold text-muted hover:text-ink whitespace-nowrap overflow-hidden"
             title={t("overlayApp.dragTooltip")}
           >
-            <span className="text-slate-500 font-mono">⋮⋮</span>
-            <span>{t("overlayApp.dragHandle")}</span>
+            <span className="pointer-events-none">⋮⋮</span>
+            <span className="pointer-events-none">{t("overlayApp.dragHandle")}</span>
           </div>
 
-          {/* Streak Badge */}
-          <div
-            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold select-none transition-all ${
-              perfectStreak() > 0
-                ? "bg-amber-500/25 text-amber-300 border border-amber-500/40 glow-streak"
-                : "bg-slate-800/60 text-slate-500"
-            }`}
+          <span
+            className="text-[11px] font-bold"
+            style={{ color: perfectStreak() > 0 ? colors().perfect : undefined }}
             title={t("overlayApp.streakTooltip")}
           >
-            <span>🔥</span>
-            <span>{perfectStreak()}</span>
-          </div>
+            {STRAFE_SYMBOLS.perfect} {perfectStreak()}
+          </span>
 
-          {/* Controls: Opacity, Lock, Close */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={cycleOpacity}
-              className="px-1.5 py-0.5 rounded bg-slate-800/70 hover:bg-slate-700 text-[10px] text-slate-300 hover:text-white transition-all cursor-pointer font-mono"
-              title={t("overlayApp.opacityTooltip")}
-            >
-              {Math.round(opacity() * 100)}%
-            </button>
-
-            <button
-              type="button"
-              onClick={handleToggleLock}
-              className={`p-1 rounded text-[11px] transition-all cursor-pointer flex items-center justify-center ${
-                isLocked()
-                  ? "bg-amber-500/30 text-amber-300 border border-amber-500/50"
-                  : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white"
-              }`}
-              title={
-                isLocked()
-                  ? t("overlayApp.lockActiveTooltip")
-                  : t("overlayApp.lockInactiveTooltip")
-              }
-            >
-              {isLocked() ? "🔒" : "🔓"}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleClose}
-              className="p-1 rounded bg-slate-800/80 hover:bg-rose-600/80 text-slate-400 hover:text-white text-[11px] transition-all cursor-pointer flex items-center justify-center leading-none"
-              title={t("overlayApp.closeTooltip")}
-            >
-              ✕
-            </button>
-          </div>
+          <button type="button" onClick={cycleOpacity} className={iconBtn} title={t("overlayApp.opacityTooltip")}>
+            {Math.round(opacity() * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleLock}
+            className={`${iconBtn} ${isLocked() ? "!border-accent !text-accent" : ""}`}
+            title={isLocked() ? t("overlayApp.lockActiveTooltip") : t("overlayApp.lockInactiveTooltip")}
+          >
+            <LockIcon open={!isLocked()} size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={toggleMini}
+            className={iconBtn}
+            title={t("overlayApp.miniTooltip")}
+            aria-label={t("overlayApp.miniTooltip")}
+          >
+            –
+          </button>
+          <button type="button" onClick={handleClose} className={iconBtn} title={t("overlayApp.closeTooltip")}>
+            <CloseIcon size={11} />
+          </button>
         </div>
 
-        {/* Center: Hero Last Strafe Metric */}
-        <div className="flex items-center justify-between py-1 px-1">
-          {lastStrafe() ? (
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-2">
-                {/* Badge Type */}
-                <div
-                  className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1"
-                  style={{
-                    "background-color":
-                      lastStrafe().type === "Perfect"
-                        ? `${colors().perfect}26`
-                        : lastStrafe().type === "Early"
-                        ? `${colors().early}26`
-                        : `${colors().late}26`,
-                    color:
-                      lastStrafe().type === "Perfect"
-                        ? colors().perfect
-                        : lastStrafe().type === "Early"
-                        ? colors().early
-                        : colors().late,
-                    border: `1px solid ${
-                      lastStrafe().type === "Perfect"
-                        ? `${colors().perfect}60`
-                        : lastStrafe().type === "Early"
-                        ? `${colors().early}60`
-                        : `${colors().late}60`
-                    }`,
-                  }}
-                >
-                  <span>
-                    {lastStrafe().type === "Perfect"
-                      ? STRAFE_SYMBOLS.perfect
-                      : lastStrafe().type === "Early"
-                      ? STRAFE_SYMBOLS.early
-                      : STRAFE_SYMBOLS.late}
-                  </span>
-                  <span>{lastStrafe().type}</span>
-                </div>
+        {/* Drill mode, progress or result */}
+        <Show when={isDrillMode()}>
+          <DrillPanel view={drillView()} leftKey={leftKey()} rightKey={rightKey()} />
+        </Show>
 
-                {/* Timing ms */}
-                <div className="text-sm font-mono font-extrabold text-white">
-                  {lastStrafe().type === "Perfect"
-                    ? "0 ms"
-                    : `${Math.round(lastStrafe().duration / 1000)} ms`}
-                </div>
-              </div>
+        {/* Last strafe */}
+        {lastStrafe() ? (
+          <div className="flex items-baseline justify-between">
+            <span className="text-[19px] font-extrabold leading-none" style={{ color: typeColor(lastStrafe().type) }}>
+              {typeSymbol(lastStrafe().type)} {lastStrafe().type}{" "}
+              {lastStrafe().type === "Perfect" ? "0" : Math.round(lastStrafe().duration / 1000)} ms
+            </span>
+            <span className="text-[12px] text-muted">
+              {lastStrafe().direction === "LeftToRight"
+                ? `${leftKey()} → ${rightKey()}`
+                : `${rightKey()} → ${leftKey()}`}
+              {lastStrafe().is_diagonal ? ` ${t("history.diagonal")}` : ""}
+            </span>
+          </div>
+        ) : (
+          <p className="text-[12px] text-muted">{t("overlayApp.waitingStrafe")}</p>
+        )}
 
-              {/* Direction Indicator */}
-              <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-                <span>
-                  {lastStrafe().direction === "LeftToRight" ? "A ➔ D" : "D ➔ A"}
-                </span>
-                {lastStrafe().is_diagonal && (
-                  <span className="text-[10px] px-1 rounded bg-slate-800 text-sky-400 font-mono">
-                    ↗
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="text-xs text-slate-500 italic text-center w-full py-1">
-              {t("overlayApp.waitingStrafe")}
-            </div>
-          )}
-        </div>
-
-        {/* Bottom bar: CS2 Speed at shot & Accuracy */}
-        <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[10px]">
-          {/* Shot Speed if fired */}
+        {/* Bottom bar: speed at shot and session accuracy */}
+        <div className="flex items-center justify-between pt-1 border-t border-line text-[11px]">
           {lastEvaluation() ? (
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">{t("overlayApp.speed")}</span>
+            <span className="text-muted">
+              {t("overlayApp.speed")}{" "}
               <span
-                className={`font-mono font-bold px-1.5 py-0.5 rounded ${
-                  lastEvaluation().isAccurate
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                    : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                }`}
+                className="font-bold"
+                style={{ color: lastEvaluation().isAccurate ? colors().perfect : colors().late }}
               >
                 {lastEvaluation().residualSpeed} u/s
-              </span>
-              <span className="text-slate-400 font-mono">
-                +{Math.round((lastStrafe()?.shot_delay || 0) / 1000)}ms
-              </span>
-            </div>
+              </span>{" "}
+              +{Math.round((lastStrafe()?.shot_delay || 0) / 1000)} ms
+            </span>
           ) : (
-            <div className="text-slate-500 flex items-center gap-1 font-mono">
-              <span>{isLocked() ? t("overlayApp.modeGame") : t("overlayApp.modeMove")}</span>
-            </div>
+            <span className="text-muted">{isLocked() ? t("overlayApp.modeGame") : t("overlayApp.modeMove")}</span>
           )}
 
-          {/* Aggregate Accuracy */}
-          <div className="flex items-center gap-1">
-            {accuracyRate() !== null ? (
-              <span className="text-slate-300 font-semibold font-mono">
-                🎯 {accuracyRate()}%{" "}
-                <span className="text-slate-500 font-normal">
-                  ({accurateShots()}/{totalShots()})
-                </span>
-              </span>
-            ) : (
-              <span className="text-slate-500 text-[10px]">
-                {t("overlayApp.shotsCount", { count: 0 })}
-              </span>
-            )}
-          </div>
+          {accuracyRate() !== null ? (
+            <span className="font-semibold">
+              {accuracyRate()}% <span className="text-muted font-normal">({accurateShots()}/{totalShots()})</span>
+            </span>
+          ) : (
+            <span className="text-muted">{t("overlayApp.shotsCount", { count: 0 })}</span>
+          )}
         </div>
       </div>
     </div>
+    </Show>
   );
 }

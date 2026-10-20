@@ -5,6 +5,14 @@ import { getOccurance } from "../utils/stats";
 import { getStrafeColors, STRAFE_SYMBOLS } from "../utils/settings";
 import { t } from "../i18n";
 
+const CHART_FONT = '"Hanken Grotesk Variable", system-ui, sans-serif';
+
+// Theme colors for chart chrome; they mirror the CSS tokens in App.css.
+const CHART_THEME = {
+  light: { text: "#56684b", legend: "#2f3a2c", grid: "rgba(47, 58, 44, 0.08)" },
+  dark: { text: "#a3b19a", legend: "#e3e9de", grid: "rgba(227, 233, 222, 0.08)" },
+};
+
 const thresholdLinesPlugin = {
   id: "thresholdLines",
   afterDatasetsDraw(chart, args, pluginOptions) {
@@ -17,41 +25,36 @@ const thresholdLinesPlugin = {
     } = chart;
     if (!x) return;
 
-    const drawLine = (targetMs, color, labelText) => {
+    const drawLine = (targetMs, color, labelText, align, row) => {
       if (targetMs == null || isNaN(targetMs) || targetMs < 0) return;
+      if (pluginOptions.maxStrafeMs != null && targetMs > pluginOptions.maxStrafeMs) return;
 
+      // Category scale: bar i covers [i*5, i*5+5) ms; interpolate between bar centers.
       const binIndex = targetMs / 5;
-      const baseIndex = Math.floor(binIndex);
-      const frac = binIndex - baseIndex;
-
-      let xPos;
-      if (typeof x.getPixelForTick === "function" && x.ticks && x.ticks.length > 0) {
-        const i1 = Math.min(Math.max(baseIndex, 0), x.ticks.length - 1);
-        const i2 = Math.min(Math.max(baseIndex + 1, 0), x.ticks.length - 1);
-        const p1 = x.getPixelForTick(i1);
-        const p2 = x.getPixelForTick(i2);
-        xPos = p1 + (p2 - p1) * frac;
-      } else if (typeof x.getPixelForValue === "function") {
-        xPos = x.getPixelForValue(binIndex);
-      }
+      const xPos = x.getPixelForValue(binIndex);
 
       if (xPos == null || isNaN(xPos)) return;
 
       ctx.save();
       ctx.beginPath();
       ctx.setLineDash([4, 4]);
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.strokeStyle = color;
       ctx.moveTo(xPos, top);
       ctx.lineTo(xPos, bottom);
       ctx.stroke();
 
       ctx.setLineDash([]);
-      ctx.font = "bold 9px sans-serif";
+      ctx.font = `600 10px ${CHART_FONT}`;
       ctx.fillStyle = color;
-      ctx.textAlign = "center";
+      // Prefer the requested side, but flip it when the label would leave the chart area.
+      const width = ctx.measureText(labelText).width;
+      let side = align;
+      if (side === "right" && xPos - 4 - width < chart.chartArea.left) side = "left";
+      if (side === "left" && xPos + 4 + width > chart.chartArea.right) side = "right";
+      ctx.textAlign = side;
       ctx.textBaseline = "bottom";
-      ctx.fillText(labelText, xPos, top - 2);
+      ctx.fillText(labelText, side === "right" ? xPos - 4 : xPos + 4, top - 2 - row * 12);
 
       ctx.restore();
     };
@@ -59,16 +62,20 @@ const thresholdLinesPlugin = {
     if (pluginOptions.earlyTarget != null && pluginOptions.earlyTarget > 0) {
       drawLine(
         pluginOptions.earlyTarget,
-        pluginOptions.earlyColor || "#38bdf8",
-        `${STRAFE_SYMBOLS.early} Early ≤ ${pluginOptions.earlyTarget}ms`
+        pluginOptions.earlyColor,
+        `${STRAFE_SYMBOLS.early} Early ≤ ${pluginOptions.earlyTarget} ms`,
+        "right",
+        1
       );
     }
 
     if (pluginOptions.lateTarget != null && pluginOptions.lateTarget > 0) {
       drawLine(
         pluginOptions.lateTarget,
-        pluginOptions.lateColor || "#fb923c",
-        `${STRAFE_SYMBOLS.late} Late ≤ ${pluginOptions.lateTarget}ms`
+        pluginOptions.lateColor,
+        `${STRAFE_SYMBOLS.late} Late ≤ ${pluginOptions.lateTarget} ms`,
+        "left",
+        0
       );
     }
   },
@@ -76,28 +83,29 @@ const thresholdLinesPlugin = {
 
 export default function StrafeChart(props) {
   const [viewMode, setViewMode] = createSignal("distribution"); // "distribution" | "trend"
-  const labels = Array.from({ length: 201 / 5 + 1 }, (_, i) => i * 5);
+  const maxMs = () => Math.max(50, Math.min(500, props.maxStrafeMs || 250));
+  const labels = () => Array.from({ length: Math.floor(maxMs() / 5) + 1 }, (_, i) => i * 5);
   const colors = () => getStrafeColors(props.colorblindMode);
 
   const [distData, setDistData] = createSignal({
-    labels,
+    labels: labels(),
     datasets: [
       {
         label: `${STRAFE_SYMBOLS.early} Early`,
-        data: getOccurance([]),
-        borderRadius: 4,
+        data: getOccurance([], maxMs()),
+        borderRadius: 2,
         backgroundColor: colors().early,
       },
       {
         label: `${STRAFE_SYMBOLS.late} Late`,
         data: [0],
-        borderRadius: 4,
+        borderRadius: 2,
         backgroundColor: colors().late,
       },
       {
         label: `${STRAFE_SYMBOLS.perfect} Perfect`,
         data: [0],
-        borderRadius: 4,
+        borderRadius: 2,
         backgroundColor: colors().perfect,
       },
     ],
@@ -118,29 +126,29 @@ export default function StrafeChart(props) {
     const late = props.lateStrafes || [];
     const perfect = props.perfectStrafes || [];
     const currentColors = colors();
+    const currentMaxMs = maxMs();
+    const currentLabels = labels();
 
     setDistData({
-      labels,
+      labels: currentLabels,
       datasets: [
         {
           label: `${STRAFE_SYMBOLS.early} ${t("table.early")}`,
-          data: getOccurance(early),
-          borderRadius: 4,
+          data: getOccurance(early, currentMaxMs),
+          borderRadius: 2,
           backgroundColor: currentColors.early,
         },
         {
           label: `${STRAFE_SYMBOLS.late} ${t("table.late")}`,
-          data: getOccurance(late),
-          borderRadius: 4,
+          data: getOccurance(late, currentMaxMs),
+          borderRadius: 2,
           backgroundColor: currentColors.late,
         },
         {
           label: `${STRAFE_SYMBOLS.perfect} ${t("table.perfect")} (0ms)`,
           data: [perfect.length],
-          borderRadius: 4,
+          borderRadius: 2,
           backgroundColor: currentColors.perfect,
-          borderWidth: 1,
-          borderColor: "#ffffff",
         },
       ],
     });
@@ -186,33 +194,78 @@ export default function StrafeChart(props) {
           label: t("chart.singleDurationLabel"),
           data: durationsMs,
           backgroundColor: pointColors,
-          borderRadius: 4,
+          borderRadius: 2,
           maxBarThickness: 16,
         },
       ],
     });
   });
 
-  const isDark = () => props.theme !== "light";
+  const isDark = () => props.theme === "dark";
+  const chartTheme = () => (isDark() ? CHART_THEME.dark : CHART_THEME.light);
 
-  const distOptions = () => ({
+  const baseOptions = () => ({
     responsive: true,
-    maintainAspectRatio: true,
-    scales: {
-      x: {
-        stacked: true,
-        grid: { color: isDark() ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
-        ticks: { color: isDark() ? "#94a3b8" : "#475569" },
-      },
-      y: {
-        stacked: true,
-        grid: { color: isDark() ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
-        ticks: { color: isDark() ? "#94a3b8" : "#475569" },
-      },
-    },
+    maintainAspectRatio: false,
+    animation: { duration: 150 },
+    font: { family: CHART_FONT },
     plugins: {
       legend: {
-        labels: { color: isDark() ? "#cbd5e1" : "#334155" },
+        position: "bottom",
+        labels: {
+          color: chartTheme().legend,
+          boxWidth: 10,
+          boxHeight: 10,
+          font: { family: CHART_FONT, size: 12 },
+        },
+      },
+    },
+  });
+
+  const axis = (extra = {}) => ({
+    grid: { color: chartTheme().grid },
+    border: { display: false },
+    ticks: { color: chartTheme().text, font: { family: CHART_FONT, size: 11 } },
+    ...extra,
+  });
+
+  const distOptions = () => ({
+    ...baseOptions(),
+    layout: { padding: { top: props.visualGoals?.enabled ? 26 : 4 } },
+    scales: {
+      x: axis({
+        stacked: true,
+        grid: { display: false },
+        ticks: {
+          color: chartTheme().text,
+          font: { family: CHART_FONT, size: 11 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 11,
+        },
+      }),
+      y: axis({
+        stacked: true,
+        beginAtZero: true,
+        ticks: {
+          color: chartTheme().text,
+          font: { family: CHART_FONT, size: 11 },
+          precision: 0,
+        },
+      }),
+    },
+    plugins: {
+      ...baseOptions().plugins,
+      tooltip: {
+        callbacks: {
+          afterBody(context) {
+            const hasPerfect = context.some((item) => item.datasetIndex === 2);
+            if (hasPerfect) {
+              return t("chart.perfectNote");
+            }
+            return "";
+          },
+        },
       },
       thresholdLines: {
         enabled: Boolean(props.visualGoals?.enabled),
@@ -220,78 +273,45 @@ export default function StrafeChart(props) {
         earlyColor: colors().early,
         lateTarget: props.visualGoals?.lateTargetMs ?? 20,
         lateColor: colors().late,
+        maxStrafeMs: maxMs(),
       },
     },
   });
 
   const trendOptions = () => ({
-    responsive: true,
-    maintainAspectRatio: true,
+    ...baseOptions(),
     scales: {
-      x: {
-        grid: { color: isDark() ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
-        ticks: { color: isDark() ? "#94a3b8" : "#475569" },
-      },
-      y: {
-        beginAtZero: true,
-        grid: { color: isDark() ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
-        ticks: { color: isDark() ? "#94a3b8" : "#475569" },
-      },
-    },
-    plugins: {
-      legend: {
-        labels: { color: isDark() ? "#cbd5e1" : "#334155" },
-      },
+      x: axis({ grid: { display: false } }),
+      y: axis({ beginAtZero: true, ticks: { color: chartTheme().text, font: { family: CHART_FONT, size: 11 }, precision: 0 } }),
     },
   });
 
+  const tabBtn = (active) =>
+    `cursor-pointer select-none transition-colors ${
+      active ? "text-ink font-semibold underline underline-offset-4" : "text-muted hover:text-ink"
+    }`;
+
   return (
-    <div className="w-full flex flex-col h-full justify-between">
-      {/* Mode Switcher */}
-      <div className="flex justify-between items-center mb-1 px-1">
-        <span className="text-xs font-semibold text-slate-400">
-          {viewMode() === "distribution"
-            ? t("chart.distributionTitle")
-            : t("chart.trendTitle")}
-        </span>
-        <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-lg text-[11px] font-semibold">
-          <button
-            type="button"
-            className={`px-2 py-0.5 rounded-md cursor-pointer transition-all ${
-              viewMode() === "distribution"
-                ? "bg-slate-700 text-white shadow-sm font-bold"
-                : "text-slate-400 hover:text-white"
-            }`}
-            onClick={() => setViewMode("distribution")}
-          >
+    <div className="w-full h-full flex flex-col min-h-0">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-base font-bold">
+          {viewMode() === "distribution" ? t("chart.distributionTitle") : t("chart.trendTitle")}
+        </h2>
+        <div className="flex gap-3 text-[12px]">
+          <button type="button" className={tabBtn(viewMode() === "distribution")} onClick={() => setViewMode("distribution")}>
             {t("chart.distributionTab")}
           </button>
-          <button
-            type="button"
-            className={`px-2 py-0.5 rounded-md cursor-pointer transition-all ${
-              viewMode() === "trend"
-                ? "bg-slate-700 text-white shadow-sm font-bold"
-                : "text-slate-400 hover:text-white"
-            }`}
-            onClick={() => setViewMode("trend")}
-          >
+          <button type="button" className={tabBtn(viewMode() === "trend")} onClick={() => setViewMode("trend")}>
             {t("chart.trendTab")}
           </button>
         </div>
       </div>
 
-      {/* Chart Canvas */}
-      <div className="flex-grow flex items-center justify-center">
+      <div className="relative flex-1 min-h-0">
         {viewMode() === "distribution" ? (
-          <Bar
-            data={distData()}
-            options={distOptions()}
-            plugins={[thresholdLinesPlugin]}
-            width={4}
-            height={3}
-          />
+          <Bar data={distData()} options={distOptions()} plugins={[thresholdLinesPlugin]} />
         ) : (
-          <Line data={trendData()} options={trendOptions()} width={4} height={3} />
+          <Line data={trendData()} options={trendOptions()} />
         )}
       </div>
     </div>
